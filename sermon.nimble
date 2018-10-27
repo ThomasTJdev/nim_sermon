@@ -4,8 +4,9 @@ version       = "0.1.0"
 author        = "ThomasTJdev"
 description   = "Tool to monitor various items on your Linux instance"
 license       = "MIT"
-srcDir        = "src"
+skipDirs      = @["src"]
 bin           = @["sermon"]
+installFiles  = @["config.default.json"]
 
 
 # Dependencies
@@ -14,9 +15,10 @@ requires "nim >= 0.19.0"
 requires "jester >= 0.4.1"
 
 import distros
-if detectOs(Windows):
-  echo "Cannot run on Windows"
-  quit()
+task setup, "Generating executable":
+  if detectOs(Windows):
+    echo "Cannot run on Windows"
+    quit()
 
-if not fileExists("config.json"):
-  exec "cp config.default.json config.json"
+before install:
+  setupTask()

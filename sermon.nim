@@ -97,7 +97,7 @@
 
 
 import asyncdispatch, httpclient, jester, json, strutils, times, os, re
-import email, logging, tools
+import src/email, src/logging, src/tools
 
 type
   Main = object ## Has main data
@@ -690,6 +690,9 @@ proc init() =
 
 
 when isMainModule:
+  if not fileExists("config.json"):
+    copyFile(getAppDir() & "/config.default.json", getAppDir() & "/config.json")
+
   echo "sermon: The health of your system and more\n"
 
   let args = multiReplace(commandLineParams().join(" "), [("-", ""), (" ", "")])
