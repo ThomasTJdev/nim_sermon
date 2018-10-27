@@ -690,7 +690,7 @@ proc init() =
 
 
 when isMainModule:
-  if not fileExists("config.json"):
+  if not fileExists(getAppDir() & "/config.json"):
     copyFile(getAppDir() & "/config.default.json", getAppDir() & "/config.json")
 
   echo "sermon: The health of your system and more\n"
