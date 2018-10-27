@@ -505,30 +505,40 @@ proc checkMemory(notifyOn = true, print = false) =
 proc monitorUrl() {.async.} =
   ## Loop to monitor the urls
   while notify.urlresponse:
+    if monitorInterval.urlresponse == 0:
+      break
     checkUrl()
     await sleepAsync(monitorInterval.urlresponse * 1000)
 
 proc monitorProcessState() {.async.} =
   ## Loop to monitor the processes
   while notify.processstate:
+    if monitorInterval.processstate == 0:
+      break
     checkProcessState()
     await sleepAsync(monitorInterval.processstate * 1000)
 
 proc monitorProcessMem() {.async.} =
   ## Loop to monitor the processes memory usage
-  while notify.processstate:
+  while notify.processmemory:
+    if monitorInterval.processmemory == 0:
+      break
     checkProcessMem()
     await sleepAsync(monitorInterval.processmemory * 1000)
 
 proc monitorStorage() {.async.} =
   ## Loop to monitor the storage
   while notify.storagepercentage:
+    if monitorInterval.storagepercentage == 0:
+      break
     checkStorage()
     await sleepAsync(monitorInterval.storagepercentage * 1000)
 
 proc monitorMemory() {.async.} =
   ## Loop to monitor the storage
   while notify.memoryusage:
+    if monitorInterval.memoryusage == 0:
+      break
     checkMemory()
     await sleepAsync(monitorInterval.memoryusage * 1000)
 
@@ -627,8 +637,11 @@ proc showHealth() =
   echo "----------------------------------------"
   echo "              Space usage"
   echo "----------------------------------------"
-  if serverSpace().findAll(re"\d\d%").len() > 0:
-    error("You have reached your warning storage level at " & $alertlevel.storagepercentage & "\n")
+  if alertlevel.storagepercentage != 0 and serverSpace().findAll(re"\d\d%").len() > 0:
+    for spacePer in serverSpace().findAll(re"\d\d%"):
+      if parseInt(spacePer.substr(0,1)) > alertlevel.storagepercentage:
+        error("You have reached your warning storage level at " & $alertlevel.storagepercentage & "\n")
+        break
   checkStorage(false, true)
   echo "\n"
   echo "----------------------------------------"
