@@ -17,3 +17,6 @@ import distros
 if detectOs(Windows):
   echo "Cannot run on Windows"
   quit()
+
+if not fileExists("config.json"):
+  exec "cp config.default.json config.json"
