@@ -23,7 +23,10 @@
     "www": {
       "apiport": 8333,
       "apikey": "123456",
-      "apicluster": ""
+      "apicluster":
+        [
+          "http://127.0.0.1:8334/654321"
+        ]
     }
   },
   {

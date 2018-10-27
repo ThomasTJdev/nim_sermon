@@ -45,8 +45,58 @@
 ##
 ## Currently you can only access the cluster in
 ## the WWW-view - terminal is not supported.
+##
+## Example output
+## --------------
+## .. code-block::plain
+##    ----------------------------------------
+##               System status
+##    ----------------------------------------
+##    Last boot:  system boot  2018-10-27 06:43
+##    Uptime:     10:25:07 up  3:42,  1 user,  load average: 1,00, 1,00, 0,88
+##    System:     Linux sys 4.18.16-arch1-1-ARCH
+##    
+##    ----------------------------------------
+##                  Memory usage
+##    ----------------------------------------
+##    Error:   Mem: Usage: 3,0Gi - Limit: 2.0
+##    Success: Swap: Usage: 0B - Limit: 1000.0
+##    
+##    ----------------------------------------
+##                  Memory per process
+##    ----------------------------------------
+##    Error:   nginx=26Mb > 20
+##    Success: sshd=23Mb < 25
+##    Error:   servermon=23Mb > 2
+##    
+##    
+##    ----------------------------------------
+##                  Process status
+##    ----------------------------------------
+##    Error:   ● nginx.service - Active: inactive (dead)
+##    Error:   ● sshd.service - Active: inactive (dead)
+##    Info:    servermon is not a service
+##    
+##    ----------------------------------------
+##                  Space usage
+##    ----------------------------------------
+##    Error:   You have reached your warning storage level at 40
+##    
+##    Success: Filesystem                           Size  Used Avail Use% Mounted on
+##    Success: dev                                  6,8G     0  6,8G   0% /dev
+##    Success: run                                  6,8G  1,3M  6,8G   1% /run
+##    Error:   /dev/mapper/AntergosVG-AntergosRoot  600G  150G  150G  50% /
+##    Success: tmpfs                                5,8G   24M  5,7G   1% /dev/shm
+##    Success: /dev/sda1                            243M   76M  151M  34% /boot
+##    
+##    ----------------------------------------
+##                  URL health
+##    ----------------------------------------
+##    Error:   301 - https://redirecturl.com
+##    Success: 200 - https://nim-lang.org
 
-import asyncdispatch, jester, json, strutils, times, os, re
+
+import asyncdispatch, httpclient, jester, json, strutils, times, os, re
 import email, logging, tools
 
 type
@@ -115,7 +165,7 @@ type
   Www = object
     apiport: Port
     apikey: string
-    apicluster: string
+    apicluster: seq[string]
 
 var notify: Notify
 var main: Main
@@ -216,9 +266,8 @@ proc loadConfig() =
     if obj.hasKey("www"):
       www.apiport = Port(obj["www"]["apiport"].getInt())
       www.apikey = obj["www"]["apikey"].getStr()
-      www.apicluster = obj["www"]["apicluster"].getStr()
-
-
+      for i in items(obj["www"]["apicluster"]):
+        www.apicluster.add(i.getStr())
 
 
 proc mailAllowed(lastMailSend: int): bool =
@@ -264,7 +313,7 @@ proc checkUrl(notifyOn = true, print = false) =
   ## Monitor urls
   if urls.responses.len() == 0:
     return
-
+  html.url = ""
   for url in urls.urls:
     let responseCode = responseCodes(url).substr(0,2)
     if urls.responses.contains(responseCode):
@@ -272,7 +321,7 @@ proc checkUrl(notifyOn = true, print = false) =
       if print: error(responseCode & " - " & url)
       html.url.add("<tr><td class=\"error\">" & responseCode & " - " & url & "</td></tr>")
     else:
-      if print: success(url & " - " & responseCode)
+      if print: success(responseCode & " - " & url)
       html.url.add("<tr><td class=\"success\">" & responseCode & " - " & url & "</td></tr>")
 
 proc checkProcessState(notifyOn = true) =
@@ -515,7 +564,7 @@ proc genHtml(): string =
   checkProcessMem(false)
 
   return "<html><head>" & css & "</head><body>" &
-              "<h3>" & main.identifier & "</h3> started: " & $now() &
+              "<h1>" & main.identifier & "</h1> started: " & $now() &
               "<hr>" &
               "<h3>Uptime:</h3> " & uptime() &
               "<hr>" &
@@ -694,3 +743,12 @@ routes:
   get "/@api":
     cond(@"api" == www.apikey)
     resp(genHtml())
+
+  get "/cluster":
+    cond(@"api" == www.apikey)
+    var client = newHttpClient()
+    var clustHtml = ""
+    for cluster in www.apicluster:
+      clustHtml.add(getContent("http://127.0.0.1:8334/123456"))
+
+    resp (genHtml() & clustHtml)

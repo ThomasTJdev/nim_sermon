@@ -44,6 +44,53 @@ you 1 place to monitor all of your sermon instances.
 Currently you can only access the cluster in
 the WWW-view - terminal is not supported.
 
-______
+# Example output
+```
+ ----------------------------------------
+            System status
+ ----------------------------------------
+ Last boot:  system boot  2018-10-27 06:43
+ Uptime:     10:25:07 up  3:42,  1 user,  load average: 1,00, 1,00, 0,88
+ System:     Linux sys 4.18.16-arch1-1-ARCH
+ 
+ ----------------------------------------
+               Memory usage
+ ----------------------------------------
+ Error:   Mem: Usage: 3,0Gi - Limit: 2.0
+ Success: Swap: Usage: 0B - Limit: 1000.0
+ 
+ ----------------------------------------
+               Memory per process
+ ----------------------------------------
+ Error:   nginx=26Mb > 20
+ Success: sshd=23Mb < 25
+ Error:   servermon=23Mb > 2
+ 
+ 
+ ----------------------------------------
+               Process status
+ ----------------------------------------
+ Error:   ● nginx.service - Active: inactive (dead)
+ Error:   ● sshd.service - Active: inactive (dead)
+ Info:    servermon is not a service
+ 
+ ----------------------------------------
+               Space usage
+ ----------------------------------------
+ Error:   You have reached your warning storage level at 40
+ 
+ Success: Filesystem                           Size  Used Avail Use% Mounted on
+ Success: dev                                  6,8G     0  6,8G   0% /dev
+ Success: run                                  6,8G  1,3M  6,8G   1% /run
+ Error:   /dev/mapper/AntergosVG-AntergosRoot  600G  150G  150G  50% /
+ Success: tmpfs                                5,8G   24M  5,7G   1% /dev/shm
+ Success: /dev/sda1                            243M   76M  151M  34% /boot
 
-*This README is generated with [Nim to Markdown](https://github.com/ThomasTJdev/nimtomd)*
+  ----------------------------------------
+                URL health
+  ----------------------------------------
+  Error:   301 - https://redirecturl.com
+  Success: 200 - https://nim-lang.org
+```
+
+*README is generated with [Nim to Markdown](https://github.com/ThomasTJdev/nimtomd)*

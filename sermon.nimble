@@ -5,7 +5,7 @@ author        = "ThomasTJdev"
 description   = "Tool to monitor various items on your Linux instance"
 license       = "MIT"
 srcDir        = "src"
-bin           = @["servermon"]
+bin           = @["sermon"]
 
 
 # Dependencies
@@ -13,7 +13,7 @@ bin           = @["servermon"]
 requires "nim >= 0.19.0"
 requires "jester >= 0.4.1"
 
-task setup, "Generating executable":
-  if detectOs(Windows):
-    echo "Cannot run on Windows"
-    quit()
+import distros
+if detectOs(Windows):
+  echo "Cannot run on Windows"
+  quit()
