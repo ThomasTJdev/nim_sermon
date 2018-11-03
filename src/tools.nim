@@ -24,7 +24,8 @@ proc linuxOutToSeq(data: string): seq[string] =
 
   return outp
 
-#[proc seqToHtmlTable(data: seq[string], hasHeading: bool, headingCount, colCount: int): string =
+#[Keeping - maybe psutil can use it
+  proc seqToHtmlTable(data: seq[string], hasHeading: bool, headingCount, colCount: int): string =
   ## Loop through seq and generates HTML table
   var countCol = 0
   var countRow = 1
@@ -60,8 +61,10 @@ proc linuxOutToSeq(data: string): seq[string] =
 
 proc responseCodes*(url: string): string =
   ## Return HTTP(s) response code
-  var client = newHttpClient()
-  return client.request(url).status
+  var client = newHttpClient(timeout=3500)
+  let status = client.request(url).status
+  close(client)
+  return status
 
 proc serverSpace*(): string =
   ## Returns available disk space
@@ -97,7 +100,7 @@ proc memoryUsageSeq*(): seq[string] =
 
 proc memoryUsageSpecific*(process: string): string =
   ## Returns the specific memory usage for a process
-  return execProcess("""ps -A -o pid,rss,command | grep nginx | grep -v grep | awk '{total+=$2}END{printf("""" & process & """=%dMb", total/1024)}'""").replace("\n", "")
+  return execProcess("""ps -A -o pid,rss,command | grep """ & process & """ | grep -v grep | awk '{total+=$2}END{printf("%dMb", total/1024)}'""").replace("\n", "")
 
 proc os*(): string =
   ## Returns OS details
