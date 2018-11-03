@@ -55,40 +55,40 @@
 ##    Last boot:  system boot  2018-10-27 06:43
 ##    Uptime:     10:25:07 up  3:42,  1 user,  load average: 1,00, 1,00, 0,88
 ##    System:     Linux sys 4.18.16-arch1-1-ARCH
-##    
+##
 ##    ----------------------------------------
 ##                  Memory usage
 ##    ----------------------------------------
 ##    Error:   Mem: Usage: 3,0Gi - Limit: 2.0
 ##    Success: Swap: Usage: 0B - Limit: 1000.0
-##    
+##
 ##    ----------------------------------------
 ##                  Memory per process
 ##    ----------------------------------------
 ##    Error:   nginx=26Mb > 20
 ##    Success: sshd=23Mb < 25
 ##    Error:   servermon=23Mb > 2
-##    
-##    
+##
+##
 ##    ----------------------------------------
 ##                  Process status
 ##    ----------------------------------------
 ##    Error:   ● nginx.service - Active: inactive (dead)
 ##    Error:   ● sshd.service - Active: inactive (dead)
 ##    Info:    servermon is not a service
-##    
+##
 ##    ----------------------------------------
 ##                  Space usage
 ##    ----------------------------------------
 ##    Error:   You have reached your warning storage level at 40
-##    
+##
 ##    Success: Filesystem                           Size  Used Avail Use% Mounted on
 ##    Success: dev                                  6,8G     0  6,8G   0% /dev
 ##    Success: run                                  6,8G  1,3M  6,8G   1% /run
 ##    Error:   /dev/mapper/AntergosVG-AntergosRoot  600G  150G  150G  50% /
 ##    Success: tmpfs                                5,8G   24M  5,7G   1% /dev/shm
 ##    Success: /dev/sda1                            243M   76M  151M  34% /boot
-##    
+##
 ##    ----------------------------------------
 ##                  URL health
 ##    ----------------------------------------
@@ -348,14 +348,17 @@ proc checkProcessState(notifyOn = true) =
 proc checkProcessStateHtml() =
   ## Generate HTML for process' state
   html.processstate = ""
-  checkProcessState(false)
-  for pros in processes.systemctlNew:
-    if pros.contains("Active: inactive (dead)"):
-      html.processstate.add("<tr><td class=\"error\">" & pros.replace(re"-.*-", "-") & "</td></tr>")
-    elif pros.contains("is not a service"):
-      html.processstate.add("<tr><td>" & pros.replace(re"-.*-", "-") & "</td></tr>")
+  for pros in processes.monitor:
+    var prosData: string
+    let prosStatus = systemctlStatus(pros)
+    if prosStatus.contains("Active: inactive (dead)"):
+      let prosHtml = split(splitLines(systemctlStatus(pros))[0], " - ")[0] & " - " & splitLines(systemctlStatus(pros))[2]
+      html.processstate.add("<tr><td class=\"error\">" & prosHtml & "</td></tr>")
+    elif prosStatus.contains("is not a service") or prosStatus.contains("could not be found"):
+      html.processstate.add("<tr><td>" & pros & " - is not a service</td></tr>")
     else:
-      html.processstate.add("<tr><td class=\"success\">" & pros.replace(re"-.*-", "-") & "</td></tr>")
+      let prosHtml = split(splitLines(systemctlStatus(pros))[0], " - ")[0] & " - " & splitLines(systemctlStatus(pros))[2]
+      html.processstate.add("<tr><td class=\"success\">" & prosHtml & "</td></tr>")
 
 proc checkProcessMem(notifyOn = true, print = false) =
   ## Monitor the processes memory usage
@@ -363,20 +366,20 @@ proc checkProcessMem(notifyOn = true, print = false) =
   var prosCount = 0
   for pros in processes.monitor:
     let prosData = memoryUsageSpecific(pros)
-    let memUsage = prosData.findAll(re"=.*Mb")
+    let memUsage = prosData.findAll(re".*Mb")
 
     if processes.maxmemoryusage[prosCount] != 0 and memUsage.len() > 0:
       for mem in memUsage:
         if parseInt(mem.multiReplace([("Mb", ""), ("=", "")])) > processes.maxmemoryusage[prosCount]:
-          if notifyOn and notify.processmemory: notifyProcesMem(prosData, $processes.maxmemoryusage[prosCount])
-          if print: error(prosData & " > " & $processes.maxmemoryusage[prosCount])
+          if notifyOn and notify.processmemory: notifyProcesMem(pros & " = " & prosData, $processes.maxmemoryusage[prosCount])
+          if print: error(pros & " = " & prosData & " > " & $processes.maxmemoryusage[prosCount])
           html.processmemory.add("<tr><td class=\"error\">" & prosData & " > " & $processes.maxmemoryusage[prosCount] & "</td></tr>")
         else:
-          if print: success(prosData & " < " & $processes.maxmemoryusage[prosCount])
-          html.processmemory.add("<tr><td class=\"success\">" & prosData & " > " & $processes.maxmemoryusage[prosCount] & "</td></tr>")
+          if print: success(pros & " = " & prosData & " < " & $processes.maxmemoryusage[prosCount])
+          html.processmemory.add("<tr><td class=\"success\">" & pros & " = " & prosData & " < " & $processes.maxmemoryusage[prosCount] & "</td></tr>")
     else:
-      if print: success(prosData & " < " & $processes.maxmemoryusage[prosCount])
-      html.processmemory.add("<tr><td class=\"success\">" & prosData & " > " & $processes.maxmemoryusage[prosCount] & "</td></tr>")
+      if print: success(pros & " = " & prosData & " < " & $processes.maxmemoryusage[prosCount])
+      html.processmemory.add("<tr><td class=\"success\">" & pros & " = " & prosData & " < " & $processes.maxmemoryusage[prosCount] & "</td></tr>")
 
     prosCount += 1
 
@@ -490,11 +493,12 @@ proc checkMemory(notifyOn = true, print = false) =
 
       if error:
         if notifyOn and notify.memoryusage: notifyMemory(memTotalSeq[itemCount-2], item, $alertFloat)
-        if print: error(memTotalSeq[itemCount-2] & " Usage: " & item & " - Limit: " & $alertFloat)
-        html.memoryErrors = "<p class=\"error\">Usage: " & item & " - Limit: " & $alertFloat & " = " & memTotalSeq[itemCount-2] & "</p>"
+        if print: error(memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat)
+        html.memoryErrors = "<p class=\"error\">" & memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat & "</p>"
         html.memory.add("<td class=\"error\">" & item & "</td>")
+        echo memTotalSeq
       else:
-        if print: success(memTotalSeq[itemCount-2] & " Usage: " & item & " - Limit: " & $alertFloat)
+        if print: success(memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat)
         html.memory.add("<td class=\"success\">" & item & "</td>")
 
     itemCount += 1
