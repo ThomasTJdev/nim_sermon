@@ -129,7 +129,8 @@ type
     memoryUsage: int
 
   Processes = ref object ## All the processes to watch
-    monitor: seq[string]
+    processState: seq[string]
+    processMemory: seq[string]
     maxmemoryusage: seq[int]
 
   Info = ref object ## General system information
@@ -275,8 +276,10 @@ proc loadConfig() =
   debug($urls[])
 
   # Set up processes
-  for i in split(dict.getSectionValue("Processes", "processes"), ","):
-    processes.monitor.add(i)
+  for i in split(dict.getSectionValue("Processes", "processState"), ","):
+    processes.processState.add(i)
+  for i in split(dict.getSectionValue("Processes", "processMemory"), ","):
+    processes.processMemory.add(i)
   for i in split(dict.getSectionValue("Processes", "maxMemoryUse"), ","):
     processes.maxmemoryUsage.add(parseInt(i))
   debug($processes[])
@@ -373,7 +376,7 @@ proc checkUrl(notifyOn = true, print = false, htmlGen = false) =
 proc checkProcessState(notifyOn = true, print = false) =
   ## Monitor processes using systemctl
 
-  for pros in processes.monitor:
+  for pros in processes.processState:
     var prettyName = pros
     if prettyName.len() < 10:
       let count = (10 - prettyName.len())
@@ -402,12 +405,12 @@ proc checkProcessState(notifyOn = true, print = false) =
 
 proc checkProcessStateHtml() =
   ## Generate HTML for process' state
-  if processes.monitor.len() == 0:
+  if processes.processState.len() == 0:
     return
 
   html.processState.add("<tr><td class=\"heading\">Process</td><td class=\"heading\">State</td></tr>")
 
-  for pros in processes.monitor:
+  for pros in processes.processState:
     var prosData: string
     let prosStatus = systemctlStatus(pros)
 
@@ -427,14 +430,14 @@ proc checkProcessStateHtml() =
 
 proc checkProcessMem(notifyOn = true, print = false, htmlGen = false) =
   ## Monitor the processes memory usage
-  if processes.monitor.len() == 0:
+  if processes.processMemory.len() == 0:
     return
 
   if htmlGen:
     html.processMemory.add("<tr><td class=\"heading\">Process</td><td class=\"heading\">Limit</td><td class=\"heading\">Usage</td></tr>")
 
   var prosCount = 0
-  for pros in processes.monitor:
+  for pros in processes.processMemory:
 
     var prettyName = pros
     if prettyName.len() < 10:
