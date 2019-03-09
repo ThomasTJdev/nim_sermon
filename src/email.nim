@@ -4,7 +4,7 @@ import asyncdispatch, smtp, strutils, os, asyncnet
 import logging
 
 type
-  SMTPDetails* = object
+  SMTPDetails* = ref object
     address*: string
     port*: string
     fromMail*: string
@@ -13,6 +13,8 @@ type
     toMail*: seq[string]
 
 var smtpDetails*: SMTPDetails
+new(smtpDetails)
+
 smtpDetails.address = ""
 
 proc sendMail*(subject, message: string) {.async.} =

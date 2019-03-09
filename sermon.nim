@@ -96,89 +96,99 @@
 ##    Success: 200 - https://nim-lang.org
 
 
-import asyncdispatch, httpclient, jester, json, strutils, times, os, re
-import src/email, src/logging, src/tools
+import asyncdispatch, httpclient, jester, json, htmlgen, nativesockets, parsecfg, strutils, times, os, re
+import src/email, src/log_utils, src/tools
 
 type
-  Main = object ## Has main data
+  Main = ref object ## Has main data
     identifier: string
     monitorinterval: int
 
-  Urls = object ## URL and data
+  Urls = ref object ## URL and data
     urls: seq[string]
     responses: seq[string]
 
-  Notify = object ## All elements which include a notification
+  Notify = ref object ## All elements which include a notification
     boot: bool
-    dailyinfo: bool
-    processstate: bool
-    processmemory: bool
-    urlresponse: bool
-    storagepercentage: bool
-    memoryusage: bool
+    dailyInfo: bool
+    processState: bool
+    processMemory: bool
+    urlResponse: bool
+    storageUse: bool
+    memoryUsage: bool
 
-  MonitorInterval = object ## Monitoring interval in seconds
-    urlresponse: int
-    processstate: int
-    processmemory: int
-    storagepercentage: int
-    memoryusage: int
+  MonitorInterval = ref object ## Monitoring interval in seconds
+    urlResponse: int
+    processState: int
+    processMemory: int
+    storageUse: int
+    memoryUsage: int
 
-  Processes = object ## All the processes to watch
+  Processes = ref object ## All the processes to watch
     monitor: seq[string]
     maxmemoryusage: seq[int]
-    systemctlNew: seq[string]
-    systemctlOld: seq[string]
 
-  Info = object ## General system information
+  Info = ref object ## General system information
     system: bool
     package: bool
     process: bool
     url: bool
 
-  Alertlevel = object ## General system information
-    storagepercentage: int
-    memoryusage: int
-    swapusage: int
+  Alertlevel = ref object ## General system information
+    storageUse: int
+    memoryUsage: int
+    swapUse: int
 
-  Timing = object ## Various timing elements
-    dailyinfo: string
-    dailyinfoevery: int
-    mailnotify: int
+  Timing = ref object ## Various timing elements
+    dailyInfo: string
+    infoEvery: int
+    infoPause: int
 
-  Mailsend = object
+  Mailsend = ref object
     url: int
-    processstate: int
-    processmemory: int
+    processState: int
+    processMemory: int
     storage: int
     memory: int
 
-  Html = object
+  Html = ref object
     url: string
-    processstate: string
-    processmemory: string
+    processState: string
+    processMemory: string
     storage: string
     storageErrors: string
     memory: string
     memoryErrors: string
 
-  Www = object
-    apiport: Port
-    apikey: string
+  Cluster = ref object
+    apiPort: Port
+    apiKey: string
     apicluster: seq[string]
 
-var notify: Notify
-var main: Main
-var urls: Urls
-var monitorInterval: MonitorInterval
-var processes: Processes
-var info: Info
-var alertlevel: Alertlevel
-var timing: Timing
-var mailsend: Mailsend
-var html: Html
-var www: Www
+var
+  notify: Notify
+  main: Main
+  urls: Urls
+  monitorInterval: MonitorInterval
+  processes: Processes
+  info: Info
+  alertlevel: Alertlevel
+  timing: Timing
+  mailsend: Mailsend
+  html: Html
+  cluster: Cluster
 
+new(notify)
+new(main)
+new(urls)
+new(monitorInterval)
+new(processes)
+new(info)
+new(alertlevel)
+new(timing)
+new(mailsend)
+new(html)
+new(cluster)
 
 const argHelp = """
 Usage:
@@ -192,90 +202,109 @@ Options:
   -cp, --clusterping  Checks the connection to the cluster nodes
   -ms, --mailstatus   Send a mail with health to emails in config"""
 
+
 proc loadConfig() =
   ## Load the main config file
-  var sermonConfig = parseFile(getAppDir() & "/config.json")
-  for obj in items(sermonConfig):
 
-    # Info
-    if obj.hasKey("info"):
-      info.system = obj["info"]["system"].getBool()
-      info.package = obj["info"]["package"].getBool()
-      info.process = obj["info"]["process"].getBool()
-      info.url = obj["info"]["url"].getBool()
+  let dict = loadConfig(getAppDir() & "/config.cfg")
 
-    # Processes
-    if obj.hasKey("processes"):
-      for i in items(obj["processes"]["monitor"]):
-        processes.monitor.add(i.getStr())
-      for i in items(obj["processes"]["maxmemoryusage"]):
-        processes.maxmemoryusage.add(i.getInt())
+  # Set up identifier
+  main.identifier       = dict.getSectionValue("Sermon", "instanceID")
+  debug($main[])
 
-    # URLs
-    if obj.hasKey("urls"):
-      for i in items(obj["urls"]["monitor"]):
-        urls.urls.add(i.getStr())
-      for i in items(obj["urls"]["response"]):
-        urls.responses.add(i.getStr())
+  # Cluset
+  cluster.apiPort       = Port(parseInt(dict.getSectionValue("Cluster", "apiPort")))
+  cluster.apiKey        = dict.getSectionValue("Cluster", "apiKey")
+  for i in split(dict.getSectionValue("Cluster", "apiCluster"), ","):
+    cluster.apicluster.add(i)
+  debug($cluster[])
 
-    # SMTP
-    if obj.hasKey("email"):
-      smtpDetails.address = obj["email"]["smtp"]["address"].getStr()
-      smtpDetails.port = obj["email"]["smtp"]["port"].getStr()
-      smtpDetails.fromMail = obj["email"]["smtp"]["from"].getStr()
-      smtpDetails.user = obj["email"]["smtp"]["user"].getStr()
-      smtpDetails.password = obj["email"]["smtp"]["password"].getStr()
-      for i in items(obj["email"]["notifyemail"]):
-        smtpDetails.toMail.add(i.getStr())
+  # Set up SMTP
+  smtpDetails.address   = dict.getSectionValue("SMTP", "SMTPAddress")
+  smtpDetails.port      = dict.getSectionValue("SMTP", "SMTPPort")
+  smtpDetails.fromMail  = dict.getSectionValue("SMTP", "SMTPFrom")
+  smtpDetails.user      = dict.getSectionValue("SMTP", "SMTPUser")
+  smtpDetails.password  = dict.getSectionValue("SMTP", "SMTPPassword")
+  for i in split(dict.getSectionValue("SMTP", "SMTPMailTo"), ","):
+    smtpDetails.toMail.add(i)
+  debug($smtpDetails[])
 
-    # Notify
-    if obj.hasKey("notify"):
-      notify.boot = obj["notify"]["boot"].getBool()
-      notify.dailyinfo = obj["notify"]["dailyinfo"].getBool()
-      notify.processstate = obj["notify"]["processstate"].getBool()
-      notify.processmemory = obj["notify"]["processmemory"].getBool()
-      notify.urlresponse = obj["notify"]["urlresponse"].getBool()
-      notify.storagepercentage = obj["notify"]["storagepercentage"].getBool()
-      notify.memoryusage = obj["notify"]["memoryusage"].getBool()
+  # Set up info choices
+  info.system         = parseBool(dict.getSectionValue("Monitor", "system"))
+  debug($info[])
 
-     # Main
-    if obj.hasKey("main"):
-      main.identifier = obj["main"]["identifier"].getStr()
+  # Set up notifications
+  notify.boot           = parseBool(dict.getSectionValue("Notify", "boot"))
+  notify.dailyInfo      = parseBool(dict.getSectionValue("Notify", "dailyInfo"))
+  notify.processState   = parseBool(dict.getSectionValue("Notify", "processState"))
+  notify.urlResponse    = parseBool(dict.getSectionValue("Notify", "processMemory"))
+  notify.memoryUsage    = parseBool(dict.getSectionValue("Notify", "urlResponse"))
+  notify.processMemory  = parseBool(dict.getSectionValue("Notify", "memoryUsage"))
+  notify.storageUse     = parseBool(dict.getSectionValue("Notify", "storageUse"))
+  debug($notify[])
 
-    # Monitor interval
-    if obj.hasKey("monitorinterval"):
-      monitorInterval.urlresponse = obj["monitorinterval"]["urlresponse"].getInt()
-      monitorInterval.processstate = obj["monitorinterval"]["processstate"].getInt()
-      monitorInterval.processmemory = obj["monitorinterval"]["processmemory"].getInt()
-      monitorInterval.storagepercentage = obj["monitorinterval"]["storagepercentage"].getInt()
-      monitorInterval.memoryusage = obj["monitorinterval"]["memoryusage"].getInt()
+  # Set up monitor interval
+  monitorInterval.urlResponse   = parseInt(dict.getSectionValue("Monitor_interval", "urlResponse"))
+  monitorInterval.processState  = parseInt(dict.getSectionValue("Monitor_interval", "processState"))
+  monitorInterval.processMemory = parseInt(dict.getSectionValue("Monitor_interval", "processMemory"))
+  monitorInterval.memoryUsage   = parseInt(dict.getSectionValue("Monitor_interval", "memoryUsage"))
+  monitorInterval.storageUse    = parseInt(dict.getSectionValue("Monitor_interval", "storageUse"))
+  debug($monitorInterval[])
 
-    # Space
-    if obj.hasKey("alertlevel"):
-      alertlevel.storagepercentage = obj["alertlevel"]["storagepercentage"].getInt()
-      alertlevel.memoryusage = obj["alertlevel"]["memoryusage"].getInt()
-      alertlevel.swapusage = obj["alertlevel"]["swapusage"].getInt()
+  # Set up timing
+  timing.dailyInfo      = dict.getSectionValue("Notify_settings", "infoDaily")
+  timing.infoEvery      = parseInt(dict.getSectionValue("Notify_settings", "infoEvery"))
+  timing.infoPause      = parseInt(dict.getSectionValue("Notify_settings", "infoPause"))
+  debug($timing[])
 
-    # Timing
-    if obj.hasKey("timing"):
-      timing.dailyinfo = obj["timing"]["dailyinfo"].getStr()
-      timing.dailyinfoevery = obj["timing"]["dailyinfoevery"].getInt()
-      timing.mailnotify = obj["timing"]["mailnotify"].getInt()
+  # Set up alert levels
+  alertlevel.storageUse   = parseInt(dict.getSectionValue("Alert_level", "storageUse"))
+  alertlevel.memoryUsage  = parseInt(dict.getSectionValue("Alert_level", "memoryUse"))
+  alertlevel.swapUse      = parseInt(dict.getSectionValue("Alert_level", "swapUse"))
+  debug($alertlevel[])
 
-    # Timing
-    if obj.hasKey("www"):
-      www.apiport = Port(obj["www"]["apiport"].getInt())
-      www.apikey = obj["www"]["apikey"].getStr()
-      for i in items(obj["www"]["apicluster"]):
-        www.apicluster.add(i.getStr())
+  # Set up URLs
+  for i in split(dict.getSectionValue("URL", "urls"), ","):
+    urls.urls.add(i)
+  for i in split(dict.getSectionValue("URL", "reponses"), ","):
+    urls.responses.add(i)
+  debug($urls[])
+
+  # Set up processes
+  for i in split(dict.getSectionValue("Processes", "processes"), ","):
+    processes.monitor.add(i)
+  for i in split(dict.getSectionValue("Processes", "maxMemoryUse"), ","):
+    processes.maxmemoryUsage.add(parseInt(i))
+  debug($processes[])
+
 
 
 proc mailAllowed(lastMailSend: int): bool =
   ## Check if mail waiting time is over
-  if lastMailSend == 0 or toInt(epochTime()) > (lastMailSend + timing.mailnotify * 60):
+  if lastMailSend == 0 or toInt(epochTime()) > (lastMailSend + timing.infoPause * 60):
     return true
   else:
     return false
+
+proc notifyBaseInfo(): string =
+  ## Generate base info to mails
+
+  var base: string
+
+  base.add(tr(("<td class=\"heading\">Item</td>") & ("<td class=\"heading\">Value</td>")))
+  base.add(tr(("<td class=\"item\">Last boot:   </td>") & td(lastBoot())))
+  base.add(tr(("<td class=\"item\">Uptime:      </td>") & td(uptime())))
+  base.add(tr(("<td class=\"item\">System:      </td>") & td(os())))
+  base.add(tr(("<td class=\"item\">Hostname:    </td>") & td(getHostname())))
+  base.add(tr(("<td class=\"item\">Public IP:   </td>") & td(pubIP())))
+  base.add(tr(("<td class=\"item\">Mem total:   </td>") & td($(getTotalMem() / 1024 / 1000) & "MB")))
+  base.add(tr(("<td class=\"item\">Mem occupied:</td>") & td($(getOccupiedMem() / 1024 / 1000) & "MB")))
+  base.add(tr(("<td class=\"item\">Mem free:    </td>") & td($(getFreeMem() / 1024 / 1000) & "MB")))
+  base.add(tr(("<td class=\"item\">Nim verion:  </td>") & td($NimVersion)))
+  base.add(tr(("<td class=\"item\">Compile time:</td>") & td($CompileTime)))
+  base.add(tr(("<td class=\"item\">Compile data:</td>") & td($CompileDate)))
+
+  return ("<table class=\"system\">" & (tbody(base)) & "</table>")
 
 proc notifyUrl(url, responseCode: string) =
   ## Notify when url response match an alert
@@ -283,23 +312,23 @@ proc notifyUrl(url, responseCode: string) =
     mailsend.url = toInt(epochTime())
     asyncCheck sendMail(main.identifier & " - URL (" & responseCode & ") alert: " & url, "<b>URL returned response code: </b>" & responseCode & "<br><b>URL:</b> " & url)
 
-proc notifyProcesState(process, systemctl: string) =
+proc notifyProcesState(process, description, systemctl: string) =
   ## Notify proc on processes
-  if mailAllowed(mailsend.processstate):
-    mailsend.processstate = toInt(epochTime())
-    asyncCheck sendMail(main.identifier & " - proces state alert: " & process, "<b>Process changed to:</b><br>" & systemctl)
+  if mailAllowed(mailsend.processState):
+    mailsend.processState = toInt(epochTime())
+    asyncCheck sendMail(main.identifier & " - " & process & " " & description, "<b>Process changed to:</b><br>" & systemctl)
 
 proc notifyProcesMem(process, maxmem: string) =
   ## Notify proc on process memory usage
-  if mailAllowed(mailsend.processmemory):
-    mailsend.processmemory = toInt(epochTime())
-    asyncCheck sendMail(main.identifier & " - proces memory alert: " & process, "<b>Process is using above memory level.</b><br><b>Level: </b>" & maxmem & "<br><b>Process: </b>" & process)
+  if mailAllowed(mailsend.processMemory):
+    mailsend.processMemory = toInt(epochTime())
+    asyncCheck sendMail(main.identifier & " - Process memory alert: " & process, "<b>Process is using above memory level.</b><br><b>Level: </b>" & maxmem & "<br><b>Process: </b>" & process)
 
 proc notifyStorage(storagePath: string) =
   ## Notify when url response match an alert
   if mailAllowed(mailsend.storage):
     mailsend.storage = toInt(epochTime())
-    asyncCheck sendMail(main.identifier & " - Storage warning, above " & $(alertlevel.storagepercentage) & "%", "<b>Warning level:<\b> " & $(alertlevel.storagepercentage) & "<br><br><b>Storage has increase above your warning level:<br></b>" & storagePath)
+    asyncCheck sendMail(main.identifier & " - Storage warning, above " & $(alertlevel.storageUse) & "%", "<b>Warning level:<\b> " & $(alertlevel.storageUse) & "<br><br><b>Storage has increase above your warning level:<br></b>" & storagePath)
 
 proc notifyMemory(element, usage, alert: string) =
   ## Notify when url response match an alert
@@ -308,87 +337,131 @@ proc notifyMemory(element, usage, alert: string) =
     asyncCheck sendMail(main.identifier & " - Memory warning, above " & alert & "%", "<b>Warning level:</b> " & alert & "<br><br><b>Memory usage has increase above your warning level:<br></b>" & element & " " & usage)
 
 
-
-proc checkUrl(notifyOn = true, print = false) =
+proc checkUrl(notifyOn = true, print = false, htmlGen = false) =
   ## Monitor urls
   if urls.responses.len() == 0:
     return
-  html.url = ""
+
+  if htmlGen:
+    html.url = ""
+    html.url = "<tr><td class=\"heading\">Response</td><td class=\"heading\">URL</td>"
+
   for url in urls.urls:
     let responseCode = responseCodes(url).substr(0,2)
     if urls.responses.contains(responseCode):
-      if notifyOn and notify.urlresponse: notifyUrl(url, responseCode)
-      if print: error(responseCode & " - " & url)
-      html.url.add("<tr><td class=\"error\">" & responseCode & " - " & url & "</td></tr>")
-    else:
-      if print: success(responseCode & " - " & url)
-      html.url.add("<tr><td class=\"success\">" & responseCode & " - " & url & "</td></tr>")
+      if notifyOn and notify.urlResponse:
+        notifyUrl(url, responseCode)
 
-proc checkProcessState(notifyOn = true) =
+      if print:
+        error(responseCode & " - " & url)
+
+      if htmlGen:
+        html.url.add("<tr><td class=\"error\">" & responseCode & "</td><td>" & url & "</td></tr>")
+
+    else:
+      if print:
+        success(responseCode & " - " & url)
+
+      if htmlGen:
+        html.url.add("<tr><td class=\"success\">" & responseCode & "</td><td>" & url & "</td></tr>")
+
+
+proc checkProcessState(notifyOn = true, print = false) =
   ## Monitor processes using systemctl
-  processes.systemctlOld = processes.systemctlNew
-  processes.systemctlNew = @[]
 
   for pros in processes.monitor:
-    var prosData: string
-    if systemctlStatus(pros).contains("could not be found"):
-      prosData = pros & " is not a service"
+    let prosData = systemctlStatus(pros)
+    if prosData.contains("could not be found") or prosData.contains("is not a service"):
+      if print:
+        info(pros & " is not a service")
+
+      if notifyOn:
+        notifyProcesState(pros, "could not be found", prosData)
+
+    elif prosData.contains("inactive (dead)"):
+      if print:
+        error(pros & " is inactive (dead)")
+
+      if notifyOn:
+        notifyProcesState(pros, "is inactive (dead)", prosData)
+
     else:
-      prosData = splitLines(systemctlStatus(pros))[0] &
-                    " - " &
-                    split(splitLines(systemctlStatus(pros))[2], ";")[0].strip()
-    processes.systemctlNew.add(prosData)
+      if print:
+        success(pros & " is active (running)")
 
-    if processes.systemctlOld.len() > 0:
-      if not processes.systemctlOld.contains(prosData):
-        if notifyOn and notify.processstate: notifyProcesState(pros, prosData)
-
-  processes.systemctlOld = @[]
 
 proc checkProcessStateHtml() =
   ## Generate HTML for process' state
-  html.processstate = ""
+  if processes.monitor.len() == 0:
+    return
+
+  html.processState.add("<tr><td class=\"heading\">Process</td><td class=\"heading\">State</td></tr>")
+
   for pros in processes.monitor:
     var prosData: string
     let prosStatus = systemctlStatus(pros)
-    if prosStatus.contains("Active: inactive (dead)"):
-      let prosHtml = split(splitLines(systemctlStatus(pros))[0], " - ")[0] & " - " & splitLines(systemctlStatus(pros))[2]
-      html.processstate.add("<tr><td class=\"error\">" & prosHtml & "</td></tr>")
-    elif prosStatus.contains("is not a service") or prosStatus.contains("could not be found"):
-      html.processstate.add("<tr><td>" & pros & " - is not a service</td></tr>")
-    else:
-      let prosHtml = split(splitLines(systemctlStatus(pros))[0], " - ")[0] & " - " & splitLines(systemctlStatus(pros))[2]
-      html.processstate.add("<tr><td class=\"success\">" & prosHtml & "</td></tr>")
 
-proc checkProcessMem(notifyOn = true, print = false) =
+    if prosStatus.contains("Active: inactive (dead)"):
+      let prosHtmlState = split(splitLines(systemctlStatus(pros))[0], " - ")[0]
+      let prosHtmlProcess = splitLines(systemctlStatus(pros))[2]
+      html.processState.add("<tr><td class=\"error\">" & prosHtmlState & "</td><td>" & prosHtmlProcess & "</td></tr>")
+
+    elif prosStatus.contains("is not a service") or prosStatus.contains("could not be found"):
+      html.processState.add("<tr><td class=\"error\">" & pros & "</td><td>is not a service</td></tr>")
+
+    else:
+      let prosHtmlState = split(splitLines(systemctlStatus(pros))[0], " - ")[0]
+      let prosHtmlProcess = splitLines(systemctlStatus(pros))[2]
+      html.processState.add("<tr><td class=\"success\">" & prosHtmlState & "</td><td>" & prosHtmlProcess & "</td></tr>")
+
+
+proc checkProcessMem(notifyOn = true, print = false, htmlGen = false) =
   ## Monitor the processes memory usage
-  html.processmemory = ""
+  if processes.monitor.len() == 0:
+    return
+
+  if htmlGen:
+    html.processMemory.add("<tr><td class=\"heading\">Process</td><td class=\"heading\">Limit</td><td class=\"heading\">Usage</td></tr>")
+
   var prosCount = 0
   for pros in processes.monitor:
     let prosData = memoryUsageSpecific(pros)
     let memUsage = prosData.findAll(re".*Mb")
 
-    if processes.maxmemoryusage[prosCount] != 0 and memUsage.len() > 0:
+    if processes.maxmemoryUsage[prosCount] != 0 and memUsage.len() > 0:
       for mem in memUsage:
-        if parseInt(mem.multiReplace([("Mb", ""), ("=", "")])) > processes.maxmemoryusage[prosCount]:
-          if notifyOn and notify.processmemory: notifyProcesMem(pros & " = " & prosData, $processes.maxmemoryusage[prosCount])
-          if print: error(pros & " = " & prosData & " > " & $processes.maxmemoryusage[prosCount])
-          html.processmemory.add("<tr><td class=\"error\">" & prosData & " > " & $processes.maxmemoryusage[prosCount] & "</td></tr>")
+        if parseInt(mem.multiReplace([("Mb", ""), ("=", "")])) > processes.maxmemoryUsage[prosCount]:
+
+          if notifyOn and notify.processMemory:
+            notifyProcesMem(pros & " = " & prosData, $processes.maxmemoryUsage[prosCount])
+
+          if print:
+            error(pros & " = " & prosData & " > " & $processes.maxmemoryUsage[prosCount])
+
+          if htmlGen:
+            html.processMemory.add("<tr><td class=\"error\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & prosData & "</td></tr>")
+
         else:
-          if print: success(pros & " = " & prosData & " < " & $processes.maxmemoryusage[prosCount])
-          html.processmemory.add("<tr><td class=\"success\">" & pros & " = " & prosData & " < " & $processes.maxmemoryusage[prosCount] & "</td></tr>")
+          if print:
+            success(pros & " = " & prosData & " < " & $processes.maxmemoryUsage[prosCount])
+
+          if htmlGen:
+            html.processMemory.add("<tr><td class=\"success\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & prosData & "</td></tr>")
     else:
-      if print: success(pros & " = " & prosData & " < " & $processes.maxmemoryusage[prosCount])
-      html.processmemory.add("<tr><td class=\"success\">" & pros & " = " & prosData & " < " & $processes.maxmemoryusage[prosCount] & "</td></tr>")
+      if print:
+        success(pros & " = " & prosData & " < " & $processes.maxmemoryUsage[prosCount])
+
+      if htmlGen:
+        html.processMemory.add("<tr><td class=\"success\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & prosData & "</td></tr>")
 
     prosCount += 1
 
+
 proc checkStorage(notifyOn = true, print = false) =
   ## Monitor storage
-  if alertlevel.storagepercentage == 0:
+  if alertlevel.storageUse == 0:
     return
 
-  html.storage = ""
   for line in serverSpace().split("\n"):
     if line.len() == 0:
       continue
@@ -396,22 +469,26 @@ proc checkStorage(notifyOn = true, print = false) =
     let spacePercent = line.findAll(re"\d\d%")
     if spacePercent.len() > 0:
       for spacePer in spacePercent:
-        if alertlevel.storagepercentage != 0 and
-              parseInt(spacePer.substr(0,1)) > alertlevel.storagepercentage:
-          if notifyOn and notify.storagepercentage: notifyStorage(line)
+        if alertlevel.storageUse != 0 and
+              parseInt(spacePer.substr(0,1)) > alertlevel.storageUse:
+          if notifyOn and notify.storageUse: notifyStorage(line)
           if print: error(line)
+
         else:
-          if print: success(line)
+          if print:success(line)
     else:
       if print: success(line)
 
-proc checkStorageHtml(notifyOn = true, print = false) =
+
+proc checkStorageHtml(notifyOn = true, print = false, htmlGen = false) =
   ## Monitor storage
-  if alertlevel.storagepercentage == 0:
+  if alertlevel.storageUse == 0:
     return
 
-  html.storage = ""
-  html.storageErrors = ""
+  if htmlGen:
+    html.storage = ""
+    html.storageErrors = ""
+
   var itemCount = 0
   let storageSeq = serverSpaceSeq()
 
@@ -419,62 +496,80 @@ proc checkStorageHtml(notifyOn = true, print = false) =
 
     if line.len() == 0:
       continue
+
     let spacePercent = line.findAll(re"\d\d%")
     if spacePercent.len() == 0:
-      if print: success(line)
-      if itemCount in [0, 6, 12, 18, 24, 30, 36, 42, 48, 54]:
-        html.storage.add("<tr><td>" & line & "</td>")
-      elif itemCount in [5, 11, 17, 23, 29, 35, 41, 47, 53]:
-        html.storage.add("<td>" & line & "</td></tr>")
-      else:
-        html.storage.add("<td>" & line & "</td>")
+      if print:
+        success(line)
+
+      if htmlGen:
+        if itemCount in [0, 6, 12, 18, 24, 30, 36, 42, 48, 54]:
+          html.storage.add("<tr><td class=\"item\">" & line & "</td>")
+        elif itemCount in [5, 11, 17, 23, 29, 35, 41, 47, 53]:
+          html.storage.add("<td>" & line & "</td></tr>")
+        else:
+          html.storage.add("<td>" & line & "</td>")
+
     else:
       for spacePer in spacePercent:
-        if alertlevel.storagepercentage != 0 and
-              parseInt(spacePer.substr(0,1)) > alertlevel.storagepercentage:
-          if notifyOn and notify.storagepercentage: notifyStorage(line)
-          if print: error(line)
-          html.storageErrors = "<p class=\"error\">Usage: " & spacePer & " - Limit: " & $alertlevel.storagepercentage & "% = " & storageSeq[itemCount-4] & "</p>"
-          html.storage.add("<td class=\"error\">" & line & "</td>")
+        if alertlevel.storageUse != 0 and
+              parseInt(spacePer.substr(0,1)) > alertlevel.storageUse:
+          if notifyOn and notify.storageUse:
+            notifyStorage(line)
+
+          if print:
+            error(line)
+
+          if htmlGen:
+            html.storageErrors = "<p class=\"error\">Usage: " & spacePer & " - Limit: " & $alertlevel.storageUse & "% = " & storageSeq[itemCount-4] & "</p>"
+            html.storage.add("<td class=\"error\">" & line & "</td>")
+
         else:
-          if print: success(line)
-          html.storage.add("<td>" & line & "</td>")
+          if print:
+            success(line)
+
+          if htmlGen:
+            html.storage.add("<td>" & line & "</td>")
 
     itemCount += 1
 
-proc checkMemory(notifyOn = true, print = false) =
+
+proc checkMemory(notifyOn = true, print = false, htmlGen = false) =
   ## Monitor storage
-  if alertlevel.memoryusage == 0 and alertlevel.swapusage == 0:
+  if alertlevel.memoryUsage == 0 and alertlevel.swapUse == 0:
     return
 
-  html.memory = ""
-  html.memoryErrors = ""
+  if htmlGen:
+    html.memory = ""
+    html.memoryErrors = ""
+
   let memTotal = memoryUsage().split("\n")
   let memTotalSeq = memoryUsageSeq()
   var itemCount = 0
+
   for item in memTotalSeq:
     if item.len() == 0:
       continue
 
     if itemCount == 0:
-      html.memory.add("<tr class=\"memory\"><td></td>")
+      if htmlGen: html.memory.add("<tr class=\"memory\"><td class=\"item\">Item</td>")
 
     if itemCount in [6, 13, 20, 27]:
-      html.memory.add("<tr class=\"memory\"><td>" & item & "</td>")
+      if htmlGen: html.memory.add("<tr class=\"memory\"><td class=\"item\">" & item & "</td>")
 
     elif itemCount in [5, 12, 18, 25]:
-      html.memory.add("<td>" & item & "</td></tr>")
+      if htmlGen: html.memory.add("<td>" & item & "</td></tr>")
 
     elif itemCount notin [8, 15, 22, 29]:
-      html.memory.add("<td>" & item & "</td>")
+      if htmlGen: html.memory.add("<td>" & item & "</td>")
 
     else:
       # First line usage
       var alert = 0
       if memTotalSeq[itemCount-2] == "Swap:":
-        alert = alertlevel.swapusage
+        alert = alertlevel.swapUse
       else:
-        alert = alertlevel.memoryusage
+        alert = alertlevel.memoryUsage
 
       var alertFloat: float
       if item.contains("Gi"):
@@ -486,20 +581,32 @@ proc checkMemory(notifyOn = true, print = false) =
       var error = false
       if alert == 0 or item.contains("B"):
         error = false
+
       elif item.contains("Gi"):
-        if parseFloat(mem) > alertFloat: error = true
+        if parseFloat(mem) > alertFloat:
+          error = true
+
       elif item.contains("Mi"):
-        if parseFloat(mem) > alertFloat: error = true
+        if parseFloat(mem) > alertFloat:
+          error = true
 
       if error:
-        if notifyOn and notify.memoryusage: notifyMemory(memTotalSeq[itemCount-2], item, $alertFloat)
-        if print: error(memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat)
-        html.memoryErrors = "<p class=\"error\">" & memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat & "</p>"
-        html.memory.add("<td class=\"error\">" & item & "</td>")
-        echo memTotalSeq
+        if notifyOn and notify.memoryUsage:
+          notifyMemory(memTotalSeq[itemCount-2], item, $alertFloat)
+
+        if print:
+          error(memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat)
+
+        if htmlGen:
+          html.memoryErrors = "<p class=\"error\">" & memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat & "</p>"
+          html.memory.add("<td class=\"error\">" & item & "</td>")
+
       else:
-        if print: success(memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat)
-        html.memory.add("<td class=\"success\">" & item & "</td>")
+        if print:
+          success(memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat)
+
+        if htmlGen:
+          html.memory.add("<td class=\"success\">" & item & "</td>")
 
     itemCount += 1
 
@@ -508,43 +615,43 @@ proc checkMemory(notifyOn = true, print = false) =
 
 proc monitorUrl() {.async.} =
   ## Loop to monitor the urls
-  while notify.urlresponse:
-    if monitorInterval.urlresponse == 0:
+  while notify.urlResponse:
+    if monitorInterval.urlResponse == 0:
       break
     checkUrl()
-    await sleepAsync(monitorInterval.urlresponse * 1000)
+    await sleepAsync(monitorInterval.urlResponse * 1000)
 
 proc monitorProcessState() {.async.} =
   ## Loop to monitor the processes
-  while notify.processstate:
-    if monitorInterval.processstate == 0:
+  while notify.processState:
+    if monitorInterval.processState == 0:
       break
     checkProcessState()
-    await sleepAsync(monitorInterval.processstate * 1000)
+    await sleepAsync(monitorInterval.processState * 1000)
 
 proc monitorProcessMem() {.async.} =
   ## Loop to monitor the processes memory usage
-  while notify.processmemory:
-    if monitorInterval.processmemory == 0:
+  while notify.processMemory:
+    if monitorInterval.processMemory == 0:
       break
     checkProcessMem()
-    await sleepAsync(monitorInterval.processmemory * 1000)
+    await sleepAsync(monitorInterval.processMemory * 1000)
 
 proc monitorStorage() {.async.} =
   ## Loop to monitor the storage
-  while notify.storagepercentage:
-    if monitorInterval.storagepercentage == 0:
+  while notify.storageUse:
+    if monitorInterval.storageUse == 0:
       break
     checkStorage()
-    await sleepAsync(monitorInterval.storagepercentage * 1000)
+    await sleepAsync(monitorInterval.storageUse * 1000)
 
 proc monitorMemory() {.async.} =
   ## Loop to monitor the storage
-  while notify.memoryusage:
-    if monitorInterval.memoryusage == 0:
+  while notify.memoryUsage:
+    if monitorInterval.memoryUsage == 0:
       break
     checkMemory()
-    await sleepAsync(monitorInterval.memoryusage * 1000)
+    await sleepAsync(monitorInterval.memoryUsage * 1000)
 
 
 const css = """
@@ -555,48 +662,87 @@ const css = """
   hr {
     margin-top: 1rem;
   }
-  table tr td {
-    border-bottom: 1px solid grey;
-  }
-  table.noborder tr td {
-    border-bottom: transparent;
-  }
   .success {
     color: green;
   }
   .error {
     color: red;
   }
+  table.system,
+  table.storage,
+  table.memory,
+  table.processMemory,
+  table.processState,
+  table.url {
+    border: 1px solid grey;
+  }
+  table.system td.item,
+  table.storage td.item,
+  table.memory td.item {
+    background: whitesmoke;
+    font-weight: 500;
+    padding: 3px;
+    width: 120px;
+  }
+  table.system td.heading,
+  table.processMemory td.heading,
+  table.processState td.heading,
+  table.url td.heading {
+    background: #122d3a;
+    color: white;
+    font-size: 115%;
+    font-weight: 700;
+    min-width: 120px;
+    padding: 3px;
+    text-align: center;
+  }
+  table.processMemory td.center {
+    text-align: center;
+  }
+  table.memory tr td:first-child {
+    background: whitesmoke;
+    font-weight: 500;
+    padding: 3px;
+    width: 120px;
+  }
 </style>
 """
 proc genHtml(): string =
   ## Generate HTML
   checkProcessStateHtml()
-  checkUrl(false)
-  checkMemory(false)
-  checkStorageHtml(false)
-  checkProcessMem(false)
+  checkUrl(false, false, true)
+  checkMemory(false, false, true)
+  checkStorageHtml(false, false, true)
+  checkProcessMem(false, false, true)
 
-  return "<html><head>" & css & "</head><body>" &
+  let htmlOut = "<html><head>" & css & "</head><body>" &
               "<h1>" & main.identifier & "</h1> started: " & $now() &
               "<hr>" &
-              "<h3>Uptime:</h3> " & uptime() &
+              "<h3>System:</h3>" &
+              notifyBaseInfo() &
               "<hr>" &
-              "<h3>Last boot:</h3> " & lastBoot() &
+              "<h3>Process memory usage: </h3><table class=\"processMemory\">" & html.processMemory & "</table>" &
               "<hr>" &
-              "<h3>OS:</h3> " & os() &
+              "<h3>Process state: </h3><table class=\"processState\">" & html.processState & "</table>" &
               "<hr>" &
-              "<h3>Process memory usage: </h3><table class=\"noborder\">" & html.processmemory & "</table>" &
+              "<h3>Memory: </h3>" & html.memoryErrors & "<table class=\"memory\">" & html.memory & "</table>" &
               "<hr>" &
-              "<h3>Process state: </h3><table class=\"noborder\">" & html.processstate & "</table>" &
+              "<h3>Space: </h3>" & html.storageErrors & "<table class=\"storage\">" & html.storage & "</table>" &
               "<hr>" &
-              "<h3>Memory: </h3>" & html.memoryErrors & "<table>" & html.memory & "</table>" &
-              "<hr>" &
-              "<h3>Space: </h3>" & html.storageErrors & "<table>" & html.storage & "</table>" &
-              "<hr>" &
-              "<h3>URL: </h3><table class=\"noborder\">" & html.url & "</table>" &
+              "<h3>URL: </h3><table class=\"url\">" & html.url & "</table>" &
               "<hr>" &
               "</body></html>"
+
+  # Clear
+  html.processMemory = ""
+  html.processState = ""
+  html.memoryErrors = ""
+  html.memory = ""
+  html.storageErrors = ""
+  html.storage = ""
+  html.url = ""
+
+  return htmlOut
 
 proc notifyOnboot() =
   ## Send email on boot
@@ -612,14 +758,22 @@ proc showHealth() =
   echo "----------------------------------------"
   echo "              System status"
   echo "----------------------------------------"
-  infoCus("Last boot:  ", lastBoot())
-  infoCus("Uptime:     ", uptime())
-  infoCus("System:     ", os())
+  infoCus("Last boot:    ", lastBoot())
+  infoCus("Uptime:       ", uptime())
+  infoCus("System:       ", os())
+  infoCus("Hostname:     ", getHostname())
+  infoCus("Public IP:    ", pubIP())
+  infoCus("Mem total:    ", $(getTotalMem() / 1024 / 1000) & "MB")
+  infoCus("Mem occupied: ", $(getOccupiedMem() / 1024 / 1000) & "MB")
+  infoCus("Mem free:     ", $(getFreeMem() / 1024 / 1000) & "MB")
+  infoCus("Nim verion:   ", $NimVersion)
+  infoCus("Compile time: ", $CompileTime)
+  infoCus("Compile data: ", $CompileDate)
   echo "\n"
   echo "----------------------------------------"
   echo "              Memory usage"
   echo "----------------------------------------"
-  checkMemory(false, true)
+  checkMemory(false, true, false)
   echo "\n"
   echo "----------------------------------------"
   echo "              Memory per process"
@@ -629,29 +783,22 @@ proc showHealth() =
   echo "----------------------------------------"
   echo "              Process status"
   echo "----------------------------------------"
-  checkProcessState()
-  for pros in processes.systemctlNew:
-    if pros.contains("Active: inactive (dead)"):
-      error(pros.replace(re"-.*-", "-"))
-    elif pros.contains("is not a service"):
-      info(pros.replace(re"-.*-", "-"))
-    else:
-      success(pros.replace(re"-.*-", "-"))
+  checkProcessState(false, true)
   echo "\n"
   echo "----------------------------------------"
   echo "              Space usage"
   echo "----------------------------------------"
-  if alertlevel.storagepercentage != 0 and serverSpace().findAll(re"\d\d%").len() > 0:
+  if alertlevel.storageUse != 0 and serverSpace().findAll(re"\d\d%").len() > 0:
     for spacePer in serverSpace().findAll(re"\d\d%"):
-      if parseInt(spacePer.substr(0,1)) > alertlevel.storagepercentage:
-        error("You have reached your warning storage level at " & $alertlevel.storagepercentage & "\n")
+      if parseInt(spacePer.substr(0,1)) > alertlevel.storageUse:
+        error("You have reached your warning storage level at " & $alertlevel.storageUse & "\n")
         break
   checkStorage(false, true)
   echo "\n"
   echo "----------------------------------------"
   echo "              URL health"
   echo "----------------------------------------"
-  checkUrl(false, true)
+  checkUrl(false, true, false)
   echo "\n"
 
 
@@ -660,18 +807,18 @@ proc showHealth() =
 
 proc dailyInfo() {.async.} =
   ## Run job every day at HH:mm
-  let nextRun = toTime(parse(getDateStr() & " " & timing.dailyinfo, "yyyy-MM-dd HH:mm")) + 1.days
+  let nextRun = toTime(parse(getDateStr() & " " & timing.dailyInfo, "yyyy-MM-dd HH:mm")) + 1.days
   var waitBeforeRun = parseInt($toUnix(nextRun))
   let firstWaiting = parseInt($(waitBeforeRun - toInt(epochTime())))
   await sleepAsync(firstWaiting * 1000)
 
-  while notify.dailyinfo:
+  while notify.dailyInfo:
     when defined(dev): info("dailyInfo() running")
 
     asyncCheck sendMail((main.identifier & ": " & $now()), genHtml())
 
-    if timing.dailyinfoevery != 0:
-      await sleepAsync(timing.dailyinfoevery * 60)
+    if timing.infoEvery != 0:
+      await sleepAsync(timing.infoEvery * 1000 * 60000)
     else:
       waitBeforeRun += 86400
       await sleepAsync((waitBeforeRun - toInt(epochTime())) * 1000)
@@ -684,31 +831,33 @@ proc init() =
   if notify.boot:
     notifyOnboot()
 
-  checkProcessState()
-
-  if notify.urlresponse:
+  if notify.urlResponse:
     asyncCheck monitorUrl()
 
-  if notify.processstate:
+  if notify.processState:
     asyncCheck monitorProcessState()
 
-  if notify.processmemory:
+  if notify.processMemory:
     asyncCheck monitorProcessMem()
 
-  if notify.memoryusage:
+  if notify.memoryUsage:
     asyncCheck monitorMemory()
 
-  if notify.storagepercentage:
+  if notify.storageUse:
     asyncCheck monitorStorage()
 
-  if notify.dailyinfo:
+  if notify.dailyInfo:
     asyncCheck dailyInfo()
 
 
 
 when isMainModule:
-  if not fileExists(getAppDir() & "/config.json"):
-    copyFile(getAppDir() & "/config.default.json", getAppDir() & "/config.json")
+  if not fileExists(getAppDir() & "/config.cfg"):
+    warning("The config file, config.cfg, does not exists.")
+    info("Generating a standard config for you.")
+    info("You can edit it anytime: config.cfg")
+    copyFile(getAppDir() & "/config_default.cfg", getAppDir() & "/config.cfg")
+    success("Config file generated")
 
   echo "sermon: The health of your system and more\n"
 
@@ -723,7 +872,6 @@ when isMainModule:
   of "s", "show":
     info("Loading config file")
     loadConfig()
-    checkProcessState()
     info("Config file loaded to memory\n")
     showHealth()
 
@@ -757,18 +905,22 @@ when isMainModule:
 
 
 settings:
-  port = www.apiport
+  port = cluster.apiPort
 
 routes:
   get "/@api":
-    cond(@"api" == www.apikey)
+    cond(@"api" == cluster.apiKey)
     resp(genHtml())
 
   get "/cluster":
-    cond(@"api" == www.apikey)
+    cond(@"api" == cluster.apiKey)
+
+    if cluster.apicluster.len() == 0:
+      resp("No cluster")
+
     var client = newHttpClient()
     var clustHtml = ""
-    for cluster in www.apicluster:
-      clustHtml.add(getContent("http://127.0.0.1:8334/123456"))
+    for cluster in cluster.apicluster:
+      clustHtml.add(getContent(cluster))
 
     resp (genHtml() & clustHtml)

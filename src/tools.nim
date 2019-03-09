@@ -1,6 +1,6 @@
 # Copyright 2018 - Thomas T. Jarløv
 
-import httpclient, strutils, osproc, streams
+import httpclient, nativesockets, strutils, osproc, streams
 
 proc linuxOutToSeq(data: string): seq[string] =
   ## Loop through linux whitespace separated command
@@ -82,6 +82,10 @@ proc serverSpaceSeq*(): seq[string] =
   outp.delete(find(outp, "on"))
   return outp
 
+proc serverSpaceValue*(location = "/"): string =
+
+  return execProcess("df --human-readable --local --output=avail " & location).replace("Avail\n", "").strip()
+
 #[proc serverSpaceHtml*(): string =
   ## Returns data for memory and swap in seq[string]
   return "<table>" & seqToHtmlTable(serverSpaceSeq(), false, 6, 6) & "</table>"]#
@@ -104,7 +108,11 @@ proc memoryUsageSpecific*(process: string): string =
 
 proc os*(): string =
   ## Returns OS details
-  return execProcess("uname -a").strip().replace("\n", "")
+  return execProcess("uname -a").strip()
+
+proc pubIP*(): string =
+  ## Return public IP
+  return newHttpClient().getContent("http://api.ipify.org").strip()
 
 proc lastBoot*(): string =
   ## Returns boot time
@@ -112,7 +120,7 @@ proc lastBoot*(): string =
 
 proc uptime*(): string =
   ## Returns uptime
-  return execProcess("uptime").strip().replace("\n", "")
+  return execProcess("uptime --pretty").strip() & " since " & execProcess("uptime --since").strip()
 
 proc rebootRequired*(): bool =
   ## Returns if reboot is required
@@ -128,7 +136,6 @@ proc packageUpgradable*(): string =
   ## Returns upgradable packages
   if not execProcess("which apt").contains("no apt"):
     return execProcess("/usr/lib/update-notifier/apt-check --human-readable")
-    #echo execProcess("/usr/lib/update-notifier/apt-check -p")
   elif not execProcess("which pacman").contains("no pacman"):
     return execProcess("pacman -Qu")
 

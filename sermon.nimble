@@ -1,17 +1,17 @@
 # Package
 
-version       = "0.1.1"
+version       = "0.2.0"
 author        = "ThomasTJdev"
-description   = "Tool to monitor various items on your Linux instance"
+description   = "Tool to monitor various items on your Linux server"
 license       = "MIT"
 skipDirs      = @["src"]
 bin           = @["sermon"]
-installFiles  = @["config.default.json"]
+installFiles  = @["config_default.cfg"]
 
 
 # Dependencies
 
-requires "nim >= 0.19.0"
+requires "nim >= 0.19.4"
 requires "jester >= 0.4.1"
 
 import distros
