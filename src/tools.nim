@@ -102,9 +102,24 @@ proc memoryUsageSeq*(): seq[string] =
   ## Returns data for memory and swap in a HTML formatted string
   return "<table>" & seqToHtmlTable(memoryUsageSeq(), true, 6, 7) & "</table>"]#
 
-proc memoryUsageSpecific*(process: string): string =
+proc memoryUsageSpecific*(process: string): float =
   ## Returns the specific memory usage for a process
-  return execProcess("""ps -A -o pid,rss,command | grep """ & process & """ | grep -v grep | awk '{total+=$2}END{printf("%dMb", total/1024)}'""").replace("\n", "")
+  let pid = execProcess("pgrep -x " & process)
+  if pid.len() == 0:
+    return 0
+
+  var memTot: float
+  var memOut: string
+
+  for pi in split(pid):
+    if pi.len() == 0:
+      continue
+    let mem = execProcess("ps -p " & pi & " -o rss").replace("RSS\n").strip()
+    let memMB = (parseInt($mem) / 1024)
+    memTot += memMB
+
+  return memTot
+  #return execProcess("""ps -A -o pid,rss,command | grep """ & process & """ | grep -v grep | awk '{total+=$2}END{printf("%dMb", total/1024)}'""").replace("\n", "")
 
 proc os*(): string =
   ## Returns OS details
@@ -112,7 +127,11 @@ proc os*(): string =
 
 proc pubIP*(): string =
   ## Return public IP
-  return newHttpClient().getContent("http://api.ipify.org").strip()
+  var client = newHttpClient(timeout=1000)
+  try:
+    return client.getContent("http://api.ipify.org").strip()
+  except:
+    return "timeout (1000ms)"
 
 proc lastBoot*(): string =
   ## Returns boot time

@@ -374,24 +374,30 @@ proc checkProcessState(notifyOn = true, print = false) =
   ## Monitor processes using systemctl
 
   for pros in processes.monitor:
+    var prettyName = pros
+    if prettyName.len() < 10:
+      let count = (10 - prettyName.len())
+      for i in countDown(count, 0):
+        prettyName.add(" ")
+
     let prosData = systemctlStatus(pros)
     if prosData.contains("could not be found") or prosData.contains("is not a service"):
       if print:
-        info(pros & " is not a service")
+        info(prettyName & ": is not a service")
 
       if notifyOn:
         notifyProcesState(pros, "could not be found", prosData)
 
     elif prosData.contains("inactive (dead)"):
       if print:
-        error(pros & " is inactive (dead)")
+        error(prettyName & ": is inactive (dead)")
 
       if notifyOn:
         notifyProcesState(pros, "is inactive (dead)", prosData)
 
     else:
       if print:
-        success(pros & " is active (running)")
+        success(prettyName & ": is active (running)")
 
 
 proc checkProcessStateHtml() =
@@ -429,34 +435,49 @@ proc checkProcessMem(notifyOn = true, print = false, htmlGen = false) =
 
   var prosCount = 0
   for pros in processes.monitor:
+
+    var prettyName = pros
+    if prettyName.len() < 10:
+      let count = (10 - prettyName.len())
+      for i in countDown(count, 0):
+        prettyName.add(" ")
+
     let prosData = memoryUsageSpecific(pros)
-    let memUsage = prosData.findAll(re".*Mb")
+    if prosData == 0:
+      continue
 
-    if processes.maxmemoryUsage[prosCount] != 0 and memUsage.len() > 0:
-      for mem in memUsage:
-        if parseInt(mem.multiReplace([("Mb", ""), ("=", "")])) > processes.maxmemoryUsage[prosCount]:
+    let memUsage = prosData #prosData.findAll(re".*Mb")
 
-          if notifyOn and notify.processMemory:
-            notifyProcesMem(pros & " = " & prosData, $processes.maxmemoryUsage[prosCount])
+    var memPretty = $memUsage
+    if ($memUsage).contains("."):
+      memPretty = split($memUsage, ".")[0] & "." & split($memUsage, ".")[0].substr(0,1)
 
-          if print:
-            error(pros & " = " & prosData & " > " & $processes.maxmemoryUsage[prosCount])
+    if processes.maxmemoryUsage[prosCount] != 0:
 
-          if htmlGen:
-            html.processMemory.add("<tr><td class=\"error\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & prosData & "</td></tr>")
+      #for mem in memUsage:
+      if toInt(memUsage) > processes.maxmemoryUsage[prosCount]:
 
-        else:
-          if print:
-            success(pros & " = " & prosData & " < " & $processes.maxmemoryUsage[prosCount])
+        if notifyOn and notify.processMemory:
+          notifyProcesMem(pros & ":  " & memPretty, $processes.maxmemoryUsage[prosCount])
 
-          if htmlGen:
-            html.processMemory.add("<tr><td class=\"success\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & prosData & "</td></tr>")
+        if print:
+          error(prettyName & ": " & memPretty & " > " & $processes.maxmemoryUsage[prosCount] & "MB")
+
+        if htmlGen:
+          html.processMemory.add("<tr><td class=\"error\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & memPretty & "MB</td></tr>")
+
+      else:
+        if print:
+          success(prettyName & ": " & memPretty & " < " & $processes.maxmemoryUsage[prosCount] & "MB")
+
+        if htmlGen:
+          html.processMemory.add("<tr><td class=\"success\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & memPretty & "MB</td></tr>")
     else:
       if print:
-        success(pros & " = " & prosData & " < " & $processes.maxmemoryUsage[prosCount])
+        success(prettyName & ": " & memPretty & "MB < " & $processes.maxmemoryUsage[prosCount] & "MB")
 
       if htmlGen:
-        html.processMemory.add("<tr><td class=\"success\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & prosData & "</td></tr>")
+        html.processMemory.add("<tr><td class=\"success\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & memPretty & "MB</td></tr>")
 
     prosCount += 1
 
@@ -594,12 +615,18 @@ proc checkMemory(notifyOn = true, print = false, htmlGen = false) =
         if parseFloat(mem) > alertFloat:
           error = true
 
+      var prettyName = memTotalSeq[itemCount-2]
+      if prettyName.len() < 6:
+        let count = (6 - prettyName.len())
+        for i in countDown(count, 0):
+          prettyName.add(" ")
+
       if error:
         if notifyOn and notify.memoryUsage:
           notifyMemory(memTotalSeq[itemCount-2], item, $alertFloat)
 
         if print:
-          error(memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat)
+          error(prettyName & " usage = " & item & " - limit = " & $alertFloat)
 
         if htmlGen:
           html.memoryErrors = "<p class=\"error\">" & memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat & "</p>"
@@ -607,7 +634,7 @@ proc checkMemory(notifyOn = true, print = false, htmlGen = false) =
 
       else:
         if print:
-          success(memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat)
+          success(prettyName & " usage = " & item & " - limit = " & $alertFloat)
 
         if htmlGen:
           html.memory.add("<td class=\"success\">" & item & "</td>")
@@ -759,9 +786,9 @@ proc notifyOnboot() =
 
 proc showHealth() =
   ## Prints the health of the current node
-  echo "----------------------------------------"
+  echo "------------------------------------------------------"
   echo "              System status"
-  echo "----------------------------------------"
+  echo "------------------------------------------------------"
   infoCus("Last boot:    ", lastBoot())
   infoCus("Uptime:       ", uptime())
   infoCus("System:       ", os())
@@ -774,24 +801,24 @@ proc showHealth() =
   infoCus("Compile time: ", $CompileTime)
   infoCus("Compile data: ", $CompileDate)
   echo "\n"
-  echo "----------------------------------------"
+  echo "------------------------------------------------------"
   echo "              Memory usage"
-  echo "----------------------------------------"
+  echo "------------------------------------------------------"
   checkMemory(false, true, false)
   echo "\n"
-  echo "----------------------------------------"
+  echo "------------------------------------------------------"
   echo "              Memory per process"
-  echo "----------------------------------------"
+  echo "------------------------------------------------------"
   checkProcessMem(false, true)
   echo "\n"
-  echo "----------------------------------------"
+  echo "------------------------------------------------------"
   echo "              Process status"
-  echo "----------------------------------------"
+  echo "------------------------------------------------------"
   checkProcessState(false, true)
   echo "\n"
-  echo "----------------------------------------"
+  echo "------------------------------------------------------"
   echo "              Space usage"
-  echo "----------------------------------------"
+  echo "------------------------------------------------------"
   if alertlevel.storageUse != 0 and serverSpace().findAll(re"\d\d%").len() > 0:
     for spacePer in serverSpace().findAll(re"\d\d%"):
       if parseInt(spacePer.substr(0,1)) > alertlevel.storageUse:
@@ -799,9 +826,9 @@ proc showHealth() =
         break
   checkStorage(false, true)
   echo "\n"
-  echo "----------------------------------------"
+  echo "------------------------------------------------------"
   echo "              URL health"
-  echo "----------------------------------------"
+  echo "------------------------------------------------------"
   checkUrl(false, true, false)
   echo "\n"
 
