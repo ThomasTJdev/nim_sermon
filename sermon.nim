@@ -453,7 +453,7 @@ proc checkProcessMem(notifyOn = true, print = false, htmlGen = false) =
 
     var memPretty = $memUsage
     if ($memUsage).contains("."):
-      memPretty = split($memUsage, ".")[0] & "." & split($memUsage, ".")[0].substr(0,1)
+      memPretty = split($memUsage, ".")[0] & "." & split($memUsage, ".")[1].substr(0,1)
 
     if processes.maxmemoryUsage[prosCount] != 0:
 
