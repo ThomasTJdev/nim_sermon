@@ -46,9 +46,13 @@
 ## Currently you can only access the cluster in
 ## the WWW-view - terminal is not supported.
 ##
+## To enable cluster, compile with `-d:cluster`
+##
 ## Example output
 ## --------------
 ## .. code-block::plain
+##    $ sermon -s
+##
 ##    ----------------------------------------
 ##               System status
 ##    ----------------------------------------
@@ -904,23 +908,24 @@ when isMainModule:
   init()
 
 
-settings:
-  port = cluster.apiPort
+when defined(cluster):
+  settings:
+    port = cluster.apiPort
 
-routes:
-  get "/@api":
-    cond(@"api" == cluster.apiKey)
-    resp(genHtml())
+  routes:
+    get "/@api":
+      cond(@"api" == cluster.apiKey)
+      resp(genHtml())
 
-  get "/cluster":
-    cond(@"api" == cluster.apiKey)
+    get "/cluster":
+      cond(@"api" == cluster.apiKey)
 
-    if cluster.apicluster.len() == 0:
-      resp("No cluster")
+      if cluster.apicluster.len() == 0:
+        resp("No cluster")
 
-    var client = newHttpClient()
-    var clustHtml = ""
-    for cluster in cluster.apicluster:
-      clustHtml.add(getContent(cluster))
+      var client = newHttpClient()
+      var clustHtml = ""
+      for cluster in cluster.apicluster:
+        clustHtml.add(getContent(cluster))
 
-    resp (genHtml() & clustHtml)
+      resp (genHtml() & clustHtml)
