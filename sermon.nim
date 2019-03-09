@@ -380,7 +380,7 @@ proc checkProcessState(notifyOn = true, print = false) =
     var prettyName = pros
     if prettyName.len() < 10:
       let count = (10 - prettyName.len())
-      for i in countDown(count, 0):
+      for i in countDown(count, 1):
         prettyName.add(" ")
 
     let prosData = systemctlStatus(pros)
@@ -442,7 +442,7 @@ proc checkProcessMem(notifyOn = true, print = false, htmlGen = false) =
     var prettyName = pros
     if prettyName.len() < 10:
       let count = (10 - prettyName.len())
-      for i in countDown(count, 0):
+      for i in countDown(count, 1):
         prettyName.add(" ")
 
     let prosData = memoryUsageSpecific(pros)
@@ -621,7 +621,7 @@ proc checkMemory(notifyOn = true, print = false, htmlGen = false) =
       var prettyName = memTotalSeq[itemCount-2]
       if prettyName.len() < 6:
         let count = (6 - prettyName.len())
-        for i in countDown(count, 0):
+        for i in countDown(count, 1):
           prettyName.add(" ")
 
       if error:
@@ -937,6 +937,8 @@ when isMainModule:
 
   init()
 
+when not defined(cluster):
+  runForever()
 
 when defined(cluster):
   settings:
