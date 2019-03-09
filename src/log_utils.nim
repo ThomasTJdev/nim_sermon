@@ -11,11 +11,12 @@ proc warning*(msg: string) =
 proc info*(msg: string) =
   styledWriteLine(stderr, fgWhite, "Info:    ", resetStyle, msg)
 
-proc debug*(msg: string) =
-  styledWriteLine(stderr, fgYellow, "Debug:   ", resetStyle, msg)
-
 proc success*(msg: string) =
   styledWriteLine(stderr, fgGreen, "Success: ", resetStyle, msg)
+
+proc debug*(msg: string) =
+  when defined(dev):
+    styledWriteLine(stderr, fgYellow, "Debug:   ", resetStyle, msg)
 
 proc infoCus*(topic, msg: string) =
   styledWriteLine(stderr, fgWhite, topic, resetStyle, msg)
