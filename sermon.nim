@@ -1,4 +1,4 @@
-# Copyright 2018 - Thomas T. Jarløv
+# Copyright 2019 - Thomas T. Jarløv
 ## sermon
 ## ---------
 ##
@@ -56,30 +56,36 @@
 ##    ----------------------------------------
 ##               System status
 ##    ----------------------------------------
-##    Last boot:  system boot  2018-10-27 06:43
-##    Uptime:     10:25:07 up  3:42,  1 user,  load average: 1,00, 1,00, 0,88
-##    System:     Linux sys 4.18.16-arch1-1-ARCH
+##    Last boot:    system boot  2018-10-27 06:43
+##    Uptime:       10:25:07 up  3:42,  1 user,  load average: 1,00, 1,00, 0,88
+##    System:       Linux sys 4.18.16-arch1-1-ARCH
+##    Hostname:     myHostname
+##    Public IP:    80.80.80.80
+##    Mem total:    1.028MB
+##    Mem occupied: 0.298453125MB
+##    Mem free:     0.488MB
+##    Nim verion:   0.19.4
+##    Compile time: 10:49:10
+##    Compile data: 2019-03-16
 ##
 ##    ----------------------------------------
 ##                  Memory usage
 ##    ----------------------------------------
-##    Error:   Mem: Usage: 3,0Gi - Limit: 2.0
-##    Success: Swap: Usage: 0B - Limit: 1000.0
-##
-##    ----------------------------------------
-##                  Memory per process
-##    ----------------------------------------
-##    Error:   nginx=26Mb > 20
-##    Success: sshd=23Mb < 25
-##    Error:   servermon=23Mb > 2
-##
+##    Error:   Mem:   Usage: 3,0Gi - Limit: 2.0
+##    Success: Swap:  Usage: 0,0Ki - Limit: 1000.0
 ##
 ##    ----------------------------------------
 ##                  Process status
 ##    ----------------------------------------
-##    Error:   ● nginx.service - Active: inactive (dead)
-##    Error:   ● sshd.service - Active: inactive (dead)
-##    Info:    servermon is not a service
+##    Error:   nginx      : is inactive (dead)
+##    Error:   sshd       : is active (running)
+##    Info:    servermon  : is not a service
+##
+##    ----------------------------------------
+##                  Memory per process
+##    ----------------------------------------
+##    Error:   nginx      : 26 > 20MB
+##    Success: sshd       : 23 < 25MB
 ##
 ##    ----------------------------------------
 ##                  Space usage
@@ -156,15 +162,6 @@ type
     storage: int
     memory: int
 
-  Html = ref object
-    url: string
-    processState: string
-    processMemory: string
-    storage: string
-    storageErrors: string
-    memory: string
-    memoryErrors: string
-
   Cluster = ref object
     apiPort: Port
     apiKey: string
@@ -180,7 +177,6 @@ var
   alertlevel: Alertlevel
   timing: Timing
   mailsend: Mailsend
-  html: Html
   cluster: Cluster
 
 new(notify)
@@ -192,7 +188,6 @@ new(info)
 new(alertlevel)
 new(timing)
 new(mailsend)
-new(html)
 new(cluster)
 
 const argHelp = """
@@ -344,14 +339,13 @@ proc notifyMemory(element, usage, alert: string) =
     asyncCheck sendMail(main.identifier & " - Memory warning, above " & alert & "%", "<b>Warning level:</b> " & alert & "<br><br><b>Memory usage has increase above your warning level:<br></b>" & element & " " & usage)
 
 
-proc checkUrl(notifyOn = true, print = false, htmlGen = false) =
+proc checkUrl(notifyOn = true, print = false, htmlGen = false): string =
   ## Monitor urls
   if urls.responses.len() == 0:
     return
 
   if htmlGen:
-    html.url = ""
-    html.url = "<tr><td class=\"heading\">Response</td><td class=\"heading\">URL</td>"
+    result = "<tr><td class=\"heading\">Response</td><td class=\"heading\">URL</td>"
 
   for url in urls.urls:
     let responseCode = responseCodes(url).substr(0,2)
@@ -363,15 +357,23 @@ proc checkUrl(notifyOn = true, print = false, htmlGen = false) =
         error(responseCode & " - " & url)
 
       if htmlGen:
-        html.url.add("<tr><td class=\"error\">" & responseCode & "</td><td>" & url & "</td></tr>")
+        result.add("<tr><td class=\"error\">" & responseCode & "</td><td>" & url & "</td></tr>")
 
     else:
       if print:
         success(responseCode & " - " & url)
 
       if htmlGen:
-        html.url.add("<tr><td class=\"success\">" & responseCode & "</td><td>" & url & "</td></tr>")
+        result.add("<tr><td class=\"success\">" & responseCode & "</td><td>" & url & "</td></tr>")
 
+proc checkUrlMon() =
+  discard checkUrl(notifyOn = true, print = false, htmlGen = false)
+
+proc checkUrlPrint() =
+  discard checkUrl(notifyOn = false, print = true, htmlGen = false)
+
+proc checkUrlHtml(notifyOn = true, print = false, htmlGen = false): string =
+  return checkUrl(notifyOn = false, print = false, htmlGen = true)
 
 proc checkProcessState(notifyOn = true, print = false) =
   ## Monitor processes using systemctl
@@ -403,12 +405,18 @@ proc checkProcessState(notifyOn = true, print = false) =
         success(prettyName & ": is active (running)")
 
 
-proc checkProcessStateHtml() =
+proc checkProcessStateMon() =
+  checkProcessState(notifyOn = true, print = false)
+
+proc checkProcessStatePrint() =
+  checkProcessState(notifyOn = false, print = true)
+
+proc checkProcessStateHtml(): string =
   ## Generate HTML for process' state
   if processes.processState.len() == 0:
     return
 
-  html.processState.add("<tr><td class=\"heading\">Process</td><td class=\"heading\">State</td></tr>")
+  result.add("<tr><td class=\"heading\">Process</td><td class=\"heading\">State</td></tr>")
 
   for pros in processes.processState:
     var prosData: string
@@ -417,28 +425,27 @@ proc checkProcessStateHtml() =
     if prosStatus.contains("Active: inactive (dead)"):
       let prosHtmlState = split(splitLines(systemctlStatus(pros))[0], " - ")[0]
       let prosHtmlProcess = splitLines(systemctlStatus(pros))[2]
-      html.processState.add("<tr><td class=\"error\">" & prosHtmlState & "</td><td>" & prosHtmlProcess & "</td></tr>")
+      result.add("<tr><td class=\"error\">" & prosHtmlState & "</td><td>" & prosHtmlProcess & "</td></tr>")
 
     elif prosStatus.contains("is not a service") or prosStatus.contains("could not be found"):
-      html.processState.add("<tr><td class=\"error\">" & pros & "</td><td>is not a service</td></tr>")
+      result.add("<tr><td class=\"error\">" & pros & "</td><td>is not a service</td></tr>")
 
     else:
       let prosHtmlState = split(splitLines(systemctlStatus(pros))[0], " - ")[0]
       let prosHtmlProcess = splitLines(systemctlStatus(pros))[2]
-      html.processState.add("<tr><td class=\"success\">" & prosHtmlState & "</td><td>" & prosHtmlProcess & "</td></tr>")
+      result.add("<tr><td class=\"success\">" & prosHtmlState & "</td><td>" & prosHtmlProcess & "</td></tr>")
 
 
-proc checkProcessMem(notifyOn = true, print = false, htmlGen = false) =
+proc checkProcessMem(notifyOn = true, print = false, htmlGen = false): string =
   ## Monitor the processes memory usage
   if processes.processMemory.len() == 0:
     return
 
   if htmlGen:
-    html.processMemory.add("<tr><td class=\"heading\">Process</td><td class=\"heading\">Limit</td><td class=\"heading\">Usage</td></tr>")
+    result.add("<tr><td class=\"heading\">Process</td><td class=\"heading\">Limit</td><td class=\"heading\">Usage</td></tr>")
 
   var prosCount = 0
   for pros in processes.processMemory:
-
     var prettyName = pros
     if prettyName.len() < 10:
       let count = (10 - prettyName.len())
@@ -467,22 +474,32 @@ proc checkProcessMem(notifyOn = true, print = false, htmlGen = false) =
           error(prettyName & ": " & memPretty & " > " & $processes.maxmemoryUsage[prosCount] & "MB")
 
         if htmlGen:
-          html.processMemory.add("<tr><td class=\"error\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & memPretty & "MB</td></tr>")
+          result.add("<tr><td class=\"error\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & memPretty & "MB</td></tr>")
 
       else:
         if print:
           success(prettyName & ": " & memPretty & " < " & $processes.maxmemoryUsage[prosCount] & "MB")
 
         if htmlGen:
-          html.processMemory.add("<tr><td class=\"success\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & memPretty & "MB</td></tr>")
+          result.add("<tr><td class=\"success\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & memPretty & "MB</td></tr>")
     else:
       if print:
         success(prettyName & ": " & memPretty & "MB < " & $processes.maxmemoryUsage[prosCount] & "MB")
 
       if htmlGen:
-        html.processMemory.add("<tr><td class=\"success\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & memPretty & "MB</td></tr>")
+        result.add("<tr><td class=\"success\">" & pros & "</td><td class=\"center\">" & $processes.maxmemoryUsage[prosCount] & "MB</td><td class=\"center\">" & memPretty & "MB</td></tr>")
 
     prosCount += 1
+
+
+proc checkProcessMemMon() =
+  discard checkProcessMem(notifyOn = true, print = false, htmlGen = false)
+
+proc checkProcessMemPrint() =
+  discard checkProcessMem(notifyOn = false, print = true, htmlGen = false)
+
+proc checkProcessMemHtml(): string =
+  return checkProcessMem(notifyOn = false, print = false, htmlGen = true)
 
 
 proc checkStorage(notifyOn = true, print = false) =
@@ -496,26 +513,39 @@ proc checkStorage(notifyOn = true, print = false) =
 
     let spacePercent = line.findAll(re"\d\d%")
     if spacePercent.len() > 0:
+
       for spacePer in spacePercent:
+
         if alertlevel.storageUse != 0 and
               parseInt(spacePer.substr(0,1)) > alertlevel.storageUse:
-          if notifyOn and notify.storageUse: notifyStorage(line)
-          if print: error(line)
+
+          if notifyOn and notify.storageUse:
+            notifyStorage(line)
+
+          if print:
+            error(line)
 
         else:
-          if print:success(line)
+          if print:
+            success(line)
     else:
-      if print: success(line)
+      if print:
+        success(line)
+
+proc checkStorageMon() =
+  checkStorage(notifyOn = true, print = false)
+
+proc checkStoragePrint() =
+  checkStorage(notifyOn = false, print = true)
 
 
-proc checkStorageHtml(notifyOn = true, print = false, htmlGen = false) =
+proc checkStorageHtml(): tuple[ok: string, err: string] =
   ## Monitor storage
   if alertlevel.storageUse == 0:
     return
 
-  if htmlGen:
-    html.storage = ""
-    html.storageErrors = ""
+  var storage: string
+  var storageErrors: string
 
   var itemCount = 0
   let storageSeq = serverSpaceSeq()
@@ -527,49 +557,36 @@ proc checkStorageHtml(notifyOn = true, print = false, htmlGen = false) =
 
     let spacePercent = line.findAll(re"\d\d%")
     if spacePercent.len() == 0:
-      if print:
-        success(line)
 
-      if htmlGen:
-        if itemCount in [0, 6, 12, 18, 24, 30, 36, 42, 48, 54]:
-          html.storage.add("<tr><td class=\"item\">" & line & "</td>")
-        elif itemCount in [5, 11, 17, 23, 29, 35, 41, 47, 53]:
-          html.storage.add("<td>" & line & "</td></tr>")
-        else:
-          html.storage.add("<td>" & line & "</td>")
+      if itemCount in [0, 6, 12, 18, 24, 30, 36, 42, 48, 54]:
+        storage.add("<tr><td class=\"item\">" & line & "</td>")
+      elif itemCount in [5, 11, 17, 23, 29, 35, 41, 47, 53]:
+        storage.add("<td>" & line & "</td></tr>")
+      else:
+        storage.add("<td>" & line & "</td>")
 
     else:
       for spacePer in spacePercent:
-        if alertlevel.storageUse != 0 and
-              parseInt(spacePer.substr(0,1)) > alertlevel.storageUse:
-          if notifyOn and notify.storageUse:
-            notifyStorage(line)
+        if alertlevel.storageUse != 0 and parseInt(spacePer.substr(0,1)) > alertlevel.storageUse:
+          storageErrors = "<p class=\"error\">Usage: " & spacePer & " - Limit: " & $alertlevel.storageUse & "% = " & storageSeq[itemCount-4] & "</p>"
 
-          if print:
-            error(line)
-
-          if htmlGen:
-            html.storageErrors = "<p class=\"error\">Usage: " & spacePer & " - Limit: " & $alertlevel.storageUse & "% = " & storageSeq[itemCount-4] & "</p>"
-            html.storage.add("<td class=\"error\">" & line & "</td>")
+          storage.add("<td class=\"error\">" & line & "</td>")
 
         else:
-          if print:
-            success(line)
-
-          if htmlGen:
-            html.storage.add("<td>" & line & "</td>")
+          storage.add("<td>" & line & "</td>")
 
     itemCount += 1
 
+  return (storage, storageErrors)
 
-proc checkMemory(notifyOn = true, print = false, htmlGen = false) =
+
+proc checkMemory(notifyOn = true, print = false, htmlGen = false): tuple[mem: string, memErr: string] =
   ## Monitor storage
   if alertlevel.memoryUsage == 0 and alertlevel.swapUse == 0:
     return
 
-  if htmlGen:
-    html.memory = ""
-    html.memoryErrors = ""
+  var htmlMem: string
+  var htmlMemErr: string
 
   let memTotal = memoryUsage().split("\n")
   let memTotalSeq = memoryUsageSeq()
@@ -580,16 +597,16 @@ proc checkMemory(notifyOn = true, print = false, htmlGen = false) =
       continue
 
     if itemCount == 0:
-      if htmlGen: html.memory.add("<tr class=\"memory\"><td class=\"item\">Item</td>")
+      if htmlGen: htmlMem.add("<tr class=\"memory\"><td class=\"item\">Item</td>")
 
     if itemCount in [6, 13, 20, 27]:
-      if htmlGen: html.memory.add("<tr class=\"memory\"><td class=\"item\">" & item & "</td>")
+      if htmlGen: htmlMem.add("<tr class=\"memory\"><td class=\"item\">" & item & "</td>")
 
     elif itemCount in [5, 12, 18, 25]:
-      if htmlGen: html.memory.add("<td>" & item & "</td></tr>")
+      if htmlGen: htmlMem.add("<td>" & item & "</td></tr>")
 
     elif itemCount notin [8, 15, 22, 29]:
-      if htmlGen: html.memory.add("<td>" & item & "</td>")
+      if htmlGen: htmlMem.add("<td>" & item & "</td>")
 
     else:
       # First line usage
@@ -632,19 +649,29 @@ proc checkMemory(notifyOn = true, print = false, htmlGen = false) =
           error(prettyName & " usage = " & item & " - limit = " & $alertFloat)
 
         if htmlGen:
-          html.memoryErrors = "<p class=\"error\">" & memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat & "</p>"
-          html.memory.add("<td class=\"error\">" & item & "</td>")
+          htmlMemErr = "<p class=\"error\">" & memTotalSeq[itemCount-2] & " usage = " & item & " - limit = " & $alertFloat & "</p>"
+          htmlMem.add("<td class=\"error\">" & item & "</td>")
 
       else:
         if print:
           success(prettyName & " usage = " & item & " - limit = " & $alertFloat)
 
         if htmlGen:
-          html.memory.add("<td class=\"success\">" & item & "</td>")
+          htmlMem.add("<td class=\"success\">" & item & "</td>")
 
     itemCount += 1
 
+  return (htmlMem, htmlMemErr)
 
+
+proc checkMemoryMon() =
+  discard checkMemory(notifyOn = true, print = false, htmlGen = false)
+
+proc checkMemoryPrint() =
+  discard checkMemory(notifyOn = false, print = true, htmlGen = false)
+
+proc checkMemoryHtml(): tuple[mem: string, memErr: string] =
+  return checkMemory(notifyOn = false, print = false, htmlGen = true)
 
 
 proc monitorUrl() {.async.} =
@@ -652,7 +679,7 @@ proc monitorUrl() {.async.} =
   while notify.urlResponse:
     if monitorInterval.urlResponse == 0:
       break
-    checkUrl()
+    checkUrlMon()
     await sleepAsync(monitorInterval.urlResponse * 1000)
 
 proc monitorProcessState() {.async.} =
@@ -660,7 +687,7 @@ proc monitorProcessState() {.async.} =
   while notify.processState:
     if monitorInterval.processState == 0:
       break
-    checkProcessState()
+    checkProcessStateMon()
     await sleepAsync(monitorInterval.processState * 1000)
 
 proc monitorProcessMem() {.async.} =
@@ -668,7 +695,7 @@ proc monitorProcessMem() {.async.} =
   while notify.processMemory:
     if monitorInterval.processMemory == 0:
       break
-    checkProcessMem()
+    checkProcessMemMon()
     await sleepAsync(monitorInterval.processMemory * 1000)
 
 proc monitorStorage() {.async.} =
@@ -676,7 +703,7 @@ proc monitorStorage() {.async.} =
   while notify.storageUse:
     if monitorInterval.storageUse == 0:
       break
-    checkStorage()
+    checkStorageMon()
     await sleepAsync(monitorInterval.storageUse * 1000)
 
 proc monitorMemory() {.async.} =
@@ -684,7 +711,7 @@ proc monitorMemory() {.async.} =
   while notify.memoryUsage:
     if monitorInterval.memoryUsage == 0:
       break
-    checkMemory()
+    checkMemoryMon()
     await sleepAsync(monitorInterval.memoryUsage * 1000)
 
 
@@ -741,13 +768,14 @@ const css = """
   }
 </style>
 """
+
 proc genHtml(): string =
   ## Generate HTML
-  checkProcessStateHtml()
-  checkUrl(false, false, true)
-  checkMemory(false, false, true)
-  checkStorageHtml(false, false, true)
-  checkProcessMem(false, false, true)
+  let processState = checkProcessStateHtml()
+  let (storage, storageErrors) = checkStorageHtml()
+  let url = checkUrlHtml()
+  let (mem, memErr) = checkMemoryHtml()
+  let processMemory = checkProcessMemHtml()
 
   let htmlOut = "<html><head>" & css & "</head><body>" &
               "<h1>" & main.identifier & "</h1> started: " & $now() &
@@ -755,26 +783,17 @@ proc genHtml(): string =
               "<h3>System:</h3>" &
               notifyBaseInfo() &
               "<hr>" &
-              "<h3>Process memory usage: </h3><table class=\"processMemory\">" & html.processMemory & "</table>" &
+              "<h3>Process memory usage: </h3><table class=\"processMemory\">" & processMemory & "</table>" &
               "<hr>" &
-              "<h3>Process state: </h3><table class=\"processState\">" & html.processState & "</table>" &
+              "<h3>Process state: </h3><table class=\"processState\">" & processState & "</table>" &
               "<hr>" &
-              "<h3>Memory: </h3>" & html.memoryErrors & "<table class=\"memory\">" & html.memory & "</table>" &
+              "<h3>Memory: </h3>" & memErr & "<table class=\"memory\">" & mem & "</table>" &
               "<hr>" &
-              "<h3>Space: </h3>" & html.storageErrors & "<table class=\"storage\">" & html.storage & "</table>" &
+              "<h3>Space: </h3>" & storageErrors & "<table class=\"storage\">" & storage & "</table>" &
               "<hr>" &
-              "<h3>URL: </h3><table class=\"url\">" & html.url & "</table>" &
+              "<h3>URL: </h3><table class=\"url\">" & url & "</table>" &
               "<hr>" &
               "</body></html>"
-
-  # Clear
-  html.processMemory = ""
-  html.processState = ""
-  html.memoryErrors = ""
-  html.memory = ""
-  html.storageErrors = ""
-  html.storage = ""
-  html.url = ""
 
   return htmlOut
 
@@ -805,19 +824,26 @@ proc showHealth() =
   infoCus("Compile data: ", $CompileDate)
   echo "\n"
   echo "------------------------------------------------------"
-  echo "              Memory usage"
+  echo "              Configuration"
   echo "------------------------------------------------------"
-  checkMemory(false, true, false)
+  echo "Monitor process state : " & $processes.processState
+  echo "Monitor process memory: " & $processes.processMemory
+  echo "Monitor url response  : " & $urls.urls
   echo "\n"
   echo "------------------------------------------------------"
-  echo "              Memory per process"
+  echo "              Memory usage"
   echo "------------------------------------------------------"
-  checkProcessMem(false, true)
+  checkMemoryPrint()
   echo "\n"
   echo "------------------------------------------------------"
   echo "              Process status"
   echo "------------------------------------------------------"
-  checkProcessState(false, true)
+  checkProcessStatePrint()
+  echo "\n"
+  echo "------------------------------------------------------"
+  echo "              Memory per process"
+  echo "------------------------------------------------------"
+  checkProcessMemPrint()
   echo "\n"
   echo "------------------------------------------------------"
   echo "              Space usage"
@@ -827,12 +853,12 @@ proc showHealth() =
       if parseInt(spacePer.substr(0,1)) > alertlevel.storageUse:
         error("You have reached your warning storage level at " & $alertlevel.storageUse & "\n")
         break
-  checkStorage(false, true)
+  checkStoragePrint()
   echo "\n"
   echo "------------------------------------------------------"
   echo "              URL health"
   echo "------------------------------------------------------"
-  checkUrl(false, true, false)
+  checkUrlPrint()
   echo "\n"
 
 
@@ -925,12 +951,10 @@ when isMainModule:
     info("Config file loaded to memory\n")
     info("Sending mail with system health")
     waitFor sendMail((main.identifier & " mailinfo: " & $now()), genHtml())
-    quit(0)
 
   else:
     if args.len() != 0:
       warning("The provided argument does not exists: " & args)
-      quit(0)
 
   if args.len() != 0:
     quit(0)

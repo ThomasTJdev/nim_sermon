@@ -53,30 +53,36 @@ To enable cluster, compile with `-d:cluster`
  ----------------------------------------
             System status
  ----------------------------------------
- Last boot:  system boot  2018-10-27 06:43
- Uptime:     10:25:07 up  3:42,  1 user,  load average: 1,00, 1,00, 0,88
- System:     Linux sys 4.18.16-arch1-1-ARCH
+ Last boot:    system boot  2018-10-27 06:43
+ Uptime:       10:25:07 up  3:42,  1 user,  load average: 1,00, 1,00, 0,88
+ System:       Linux sys 4.18.16-arch1-1-ARCH
+ Hostname:     myHostname
+ Public IP:    80.80.80.80
+ Mem total:    1.028MB
+ Mem occupied: 0.298453125MB
+ Mem free:     0.488MB
+ Nim verion:   0.19.4
+ Compile time: 10:49:10
+ Compile data: 2019-03-16
 
  ----------------------------------------
                Memory usage
  ----------------------------------------
- Error:   Mem: Usage: 3,0Gi - Limit: 2.0
- Success: Swap: Usage: 0B - Limit: 1000.0
-
- ----------------------------------------
-               Memory per process
- ----------------------------------------
- Error:   nginx=26Mb > 20
- Success: sshd=23Mb < 25
- Error:   servermon=23Mb > 2
-
+ Error:   Mem:   Usage: 3,0Gi - Limit: 2.0
+ Success: Swap:  Usage: 0,0Ki - Limit: 1000.0
 
  ----------------------------------------
                Process status
  ----------------------------------------
- Error:   ● nginx.service - Active: inactive (dead)
- Error:   ● sshd.service - Active: inactive (dead)
- Info:    servermon is not a service
+ Error:   nginx      : is inactive (dead)
+ Error:   sshd       : is active (running)
+ Info:    servermon  : is not a service
+
+ ----------------------------------------
+               Memory per process
+ ----------------------------------------
+ Error:   nginx      : 26 > 20MB
+ Success: sshd       : 23 < 25MB
 
  ----------------------------------------
                Space usage
@@ -90,11 +96,11 @@ To enable cluster, compile with `-d:cluster`
  Success: tmpfs                                5,8G   24M  5,7G   1% /dev/shm
  Success: /dev/sda1                            243M   76M  151M  34% /boot
 
-  ----------------------------------------
-                URL health
-  ----------------------------------------
-  Error:   301 - https://redirecturl.com
-  Success: 200 - https://nim-lang.org
+ ----------------------------------------
+               URL health
+ ----------------------------------------
+ Error:   301 - https://redirecturl.com
+ Success: 200 - https://nim-lang.org
 ```
 
 *README is generated with [Nim to Markdown](https://github.com/ThomasTJdev/nimtomd)*
