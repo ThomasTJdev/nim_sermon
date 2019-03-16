@@ -75,7 +75,7 @@ To enable cluster, compile with `-d:cluster`
                Process status
  ----------------------------------------
  Error:   nginx      : is inactive (dead)
- Error:   sshd       : is active (running)
+ Success: sshd       : is active (running)
  Info:    servermon  : is not a service
 
  ----------------------------------------
