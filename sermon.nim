@@ -237,9 +237,9 @@ proc loadConfig() =
   notify.boot           = parseBool(dict.getSectionValue("Notify", "boot"))
   notify.dailyInfo      = parseBool(dict.getSectionValue("Notify", "dailyInfo"))
   notify.processState   = parseBool(dict.getSectionValue("Notify", "processState"))
-  notify.urlResponse    = parseBool(dict.getSectionValue("Notify", "processMemory"))
-  notify.memoryUsage    = parseBool(dict.getSectionValue("Notify", "urlResponse"))
-  notify.processMemory  = parseBool(dict.getSectionValue("Notify", "memoryUsage"))
+  notify.processMemory  = parseBool(dict.getSectionValue("Notify", "processMemory"))
+  notify.urlResponse    = parseBool(dict.getSectionValue("Notify", "urlResponse"))
+  notify.memoryUsage    = parseBool(dict.getSectionValue("Notify", "memoryUsage"))
   notify.storageUse     = parseBool(dict.getSectionValue("Notify", "storageUse"))
   debug($notify[])
 
