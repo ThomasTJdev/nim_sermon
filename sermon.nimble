@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.2.9"
+version       = "0.3.0"
 author        = "ThomasTJdev"
 description   = "Tool to monitor various items on your Linux server"
 license       = "MIT"
