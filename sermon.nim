@@ -164,7 +164,7 @@ proc dailyInfo() {.async.} =
 proc monitor() {.async.} =
   ## Continuously monitoring
 
-  if monitorInterval > 0:
+  while monitorInterval > 0:
     await sleepAsync(monitorInterval * 1000)
     runMain("monitor")
 
