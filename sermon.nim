@@ -14,6 +14,17 @@
 ## or on your server. The best way to run the program
 ## is by adding it as a system service.
 ##
+## System health vs Continuously monitoring
+## ========================================
+## You can monitor you system in 2 ways. Either getting 1 or more
+## daily notifications, or continuously monitoring various
+## system parameters.
+##
+## To activate continuously monitoring disable:
+##   `dailyInfo = "false"` in the config.cfg
+## Otherwise the daily notification is enabled.
+##
+##
 ## Usage
 ## =====
 ## .. code-block::plain
