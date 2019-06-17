@@ -159,7 +159,8 @@ proc runMain(userArgs = "") =
 
 proc dailyInfo() {.async.} =
   ## Run job every day at HH:mm
-  var waitBeforeRun = 1000
+  let nextRun = toTime(parse(getDateStr() & " " & timingDailyInfo, "yyyy-MM-dd HH:mm")) + 1.days
+  var waitBeforeRun = parseInt($toUnix(nextRun))
 
   while notifyDailyInfo:
     when defined(dev): info("dailyInfo() running")
@@ -175,7 +176,7 @@ proc dailyInfo() {.async.} =
 proc monitor() {.async.} =
   ## Continuously monitoring
 
-  while monitorInterval > 0:
+  while true:
     await sleepAsync(monitorInterval * 1000)
     runMain("monitor")
 
