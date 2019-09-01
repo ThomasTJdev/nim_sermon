@@ -161,3 +161,7 @@ proc packageUpgradable*(): string =
 proc systemctlStatus*(process: string): string =
   ## Returns data for memory and swap
   return execProcess("systemctl status " & process)
+
+proc mountPoint*(mountDir: string): string =
+  ## Check if dir is a mountpoint
+  return execProcess("mountpoint " & mountDir)

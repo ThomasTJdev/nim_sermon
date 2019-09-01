@@ -192,9 +192,9 @@ when isMainModule:
   if not fileExists(getAppDir() & "/config.cfg"):
     warning("The config file, config.cfg, does not exists.")
     info("Generating a standard config for you.")
-    info("You can edit it anytime: config.cfg")
+    info("You can edit it anytime: " & getAppDir() & "/config.cfg")
     copyFile(getAppDir() & "/config_default.cfg", getAppDir() & "/config.cfg")
-    success("Config file generated")
+    success("Config file generated\n")
 
   if not fileExists(getAppDir() & "/src/main"):
     discard execCmd("nim c -d:release -d:ssl " & getAppDir() & "/src/main.nim")
@@ -205,8 +205,10 @@ when isMainModule:
     discard execCmd(getAppDir() & "/src/main " & args)
     quit()
   elif notifyDailyInfo:
+    info("Starting daily notification")
     asyncCheck dailyInfo()
   elif monitorInterval > 0:
+    info("Starting monitoring")
     asyncCheck monitor()
   else:
     info("No args specificed and daily info disabled. Exiting.")

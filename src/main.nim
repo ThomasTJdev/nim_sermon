@@ -73,6 +73,9 @@ type
     apiKey: string
     apicluster: seq[string]
 
+  Mount = ref object
+    mountPoint: seq[string]
+
 var
   notify: Notify
   main: Main
@@ -83,6 +86,7 @@ var
   timing: Timing
   mailsend: Mailsend
   cluster: Cluster
+  mount: Mount
 
 new(notify)
 new(main)
@@ -93,6 +97,7 @@ new(alertlevel)
 new(timing)
 new(mailsend)
 new(cluster)
+new(mount)
 
 const argHelp = """
 Usage:
@@ -123,16 +128,6 @@ proc loadConfig() =
     cluster.apicluster.add(i)
   debug($cluster[])
 
-  # Set up SMTP
-  smtpDetails.address   = dict.getSectionValue("SMTP", "SMTPAddress")
-  smtpDetails.port      = dict.getSectionValue("SMTP", "SMTPPort")
-  smtpDetails.fromMail  = dict.getSectionValue("SMTP", "SMTPFrom")
-  smtpDetails.user      = dict.getSectionValue("SMTP", "SMTPUser")
-  smtpDetails.password  = dict.getSectionValue("SMTP", "SMTPPassword")
-  for i in split(dict.getSectionValue("SMTP", "SMTPMailTo"), ","):
-    smtpDetails.toMail.add(i)
-  debug($smtpDetails[])
-
   # Set up info choices
   info.system         = parseBool(dict.getSectionValue("Monitor", "system"))
   debug($info[])
@@ -150,6 +145,10 @@ proc loadConfig() =
   alertlevel.memoryUsage  = parseInt(dict.getSectionValue("Alert_level", "memoryUse"))
   alertlevel.swapUse      = parseInt(dict.getSectionValue("Alert_level", "swapUse"))
   debug($alertlevel[])
+
+  # Set up mountpoints
+  for i in split(dict.getSectionValue("Mount", "mountpoint"), ","):
+    mount.mountpoint.add(i)
 
   # Set up URLs
   for i in split(dict.getSectionValue("URL", "urls"), ","):
@@ -562,6 +561,24 @@ proc checkMemoryHtml(): tuple[mem: string, memErr: string] =
   return checkMemory(notifyOn = false, print = false, htmlGen = true)
 
 
+proc checkMountPrint() =
+  for m in mount.mountpoint:
+    let ret = mountPoint(m)
+    if ret.contains("is a mountpoint"):
+      success(ret)
+    else:
+      error(m & " was not found as a mountpoint")
+
+proc checkMountHtml(): string =
+  result = "<tr><td class=\"heading\">Mountpoint</td><td class=\"heading\">Is mounted</td>"
+  for m in mount.mountpoint:
+    let ret = mountPoint(m)
+    if ret.contains("is a mountpoint"):
+      result.add("<tr><td class=\"success\">" & m & "</td><td>is a mountpoint</td></tr>")
+    else:
+      result.add("<tr><td class=\"error\">" & m & "</td><td>not a mountpoint</td></tr>")
+
+
 const css = """
 <style>
   h3 {
@@ -581,7 +598,8 @@ const css = """
   table.memory,
   table.processMemory,
   table.processState,
-  table.url {
+  table.url,
+  table.mount {
     border: 1px solid grey;
   }
   table.system td.item,
@@ -595,7 +613,8 @@ const css = """
   table.system td.heading,
   table.processMemory td.heading,
   table.processState td.heading,
-  table.url td.heading {
+  table.url td.heading,
+  table.mount td.heading {
     background: #122d3a;
     color: white;
     font-size: 115%;
@@ -621,6 +640,7 @@ proc genHtml(): string =
   let processState = checkProcessStateHtml()
   let (storage, storageErrors) = checkStorageHtml()
   let url = checkUrlHtml()
+  let mountData = checkMountHtml()
   let (mem, memErr) = checkMemoryHtml()
   let processMemory = checkProcessMemHtml()
 
@@ -639,6 +659,8 @@ proc genHtml(): string =
               "<h3>Space: </h3>" & storageErrors & "<table class=\"storage\">" & storage & "</table>" &
               "<hr>" &
               "<h3>URL: </h3><table class=\"url\">" & url & "</table>" &
+              "<hr>" &
+              "<h3>Mount: </h3><table class=\"mount\">" & mountData & "</table>" &
               "<hr>" &
               "</body></html>"
 
@@ -668,6 +690,7 @@ proc showHealth() =
   echo "Monitor process state : " & $processes.processState
   echo "Monitor process memory: " & $processes.processMemory
   echo "Monitor url response  : " & $urls.urls
+  echo "Mountpoints to check  : " & $mount.mountpoint
   echo "\n"
   echo "------------------------------------------------------"
   echo "              Memory usage"
@@ -693,6 +716,11 @@ proc showHealth() =
         error("You have reached your warning storage level at " & $alertlevel.storageUse & "\n")
         break
   checkStoragePrint()
+  echo "\n"
+  echo "------------------------------------------------------"
+  echo "              Mount"
+  echo "------------------------------------------------------"
+  checkMountPrint()
   echo "\n"
   echo "------------------------------------------------------"
   echo "              URL health"
