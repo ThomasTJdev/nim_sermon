@@ -1,18 +1,18 @@
 # Package
 
-version       = "0.3.0"
+version       = "0.3.1"
 author        = "ThomasTJdev"
 description   = "Tool to monitor various items on your Linux server"
 license       = "MIT"
-skipDirs      = @["src"]
 bin           = @["sermon"]
+installDirs   = @["src"]
 installFiles  = @["config_default.cfg"]
 
 
 # Dependencies
 
-requires "nim >= 0.19.4"
-requires "jester >= 0.4.1"
+requires "nim >= 0.20.2"
+requires "jester >= 0.4.3"
 
 import distros
 task setup, "Generating executable":
